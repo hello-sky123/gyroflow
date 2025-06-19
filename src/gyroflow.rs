@@ -54,12 +54,13 @@ fn entry() {
         }
     }
 
-    let _ = util::install_crash_handler();
-    util::init_logging();
-    util::update_rlimit();
+    let _ = util::install_crash_handler(); // 安装崩溃日志记录器
+    util::init_logging(); // 日志系统初始化
+    util::update_rlimit(); // 在macOS和Linux上动态提升进程允许打开的最大文件数量（RLIMIT_NOFILE）
     util::set_android_context();
-    log_panics::init();
+    log_panics::init(); // 捕捉所有panic并记录堆栈
 
+    // 设置Qt应用元信息，确定配置路径、窗口名称等，以及Qt和Rust日志输出
     cpp!(unsafe [] {
         qApp->setOrganizationName("Gyroflow");
         qApp->setOrganizationDomain("gyroflow.xyz");
@@ -69,6 +70,7 @@ fn entry() {
     });
     ::log::debug!("Gyroflow {}", util::get_version());
 
+    // 检查是否通过命令行参数（CLI）启动了某个任务，如果是，就立即执行并退出主程序
     let mut open_file = String::new();
     if cli::run(&mut open_file) {
         return;
@@ -76,12 +78,13 @@ fn entry() {
 
     if cfg!(compiled_qml) {
         // For some reason on some devices QML detects that debugger is connected and fails to load pre-compiled qml files
+        // 在编译期检测是否启用了预编译 QML（compiled_qml）功能，如果是，就设置Qt环境变量QML_FORCE_DISK_CACHE=1来强制使用磁盘缓存加载QML
         cpp!(unsafe [] { qputenv("QML_FORCE_DISK_CACHE", "1"); });
     }
 
-    crate::resources::rsrc();
+    resources::rsrc(); // 加载资源文件，包含UI组件、图标、着色器等
     #[cfg(not(compiled_qml))]
-    crate::resources_qml::rsrc_qml();
+    resources_qml::rsrc_qml(); // 加载QML资源文件，包含UI组件、图标、着色器等
 
     qml_video_rs::register_qml_types();
     qml_register_type::<TimelineGyroChart>(cstr::cstr!("Gyroflow"), 1, 0, cstr::cstr!("TimelineGyroChart"));
@@ -119,10 +122,10 @@ fn entry() {
         gyroflow_core::settings::set("defaultCodec", 0.into()); // default to H.264 on mobile
     }
 
-    util::save_exe_location();
+    util::save_exe_location(); // 将当前可执行文件路径保存到设置中，以便后续使用
     let sdk_path = external_sdk::SDK_PATH.as_ref().map(|x| x.to_string_lossy().to_string()).unwrap_or_default();
     ::log::debug!("Executable path: {:?}", gyroflow_core::settings::try_get("exeLocation"));
-    ::log::debug!("SDK path: {:?}", sdk_path);
+    ::log::debug!("SDK path: {:?}", sdk_path); // {:?}要求参数实现Debug trait
 
     //crate::core::util::rename_calib_videos();
 
@@ -133,20 +136,25 @@ fn entry() {
             MDKVideoItem::setGlobalOption("plugins", "mdk-braw");
         }
     } else {
+        // 设置授权秘钥
         MDKVideoItem::setGlobalOption("MDK_KEY", "47FA7B212D5FF2F649A245E6D8DC2D88BAB67C208282CB3E2DEB95B9B4F9EC575102303FB92448ED49454E027A31B48ED08824EB904B58F693AD\
             B52FA63A4008B80584DE2D5F0D09B65DBA192723D277B8B67447FBF0A4584184E2659155D95CFBEB08626CBE3C94416B2FC50B1FA1201AA7381CE3E85DF3F3BF9BCB59677808");
-        MDKVideoItem::setGlobalOption("plugins", "mdk-braw:mdk-r3d");
+        MDKVideoItem::setGlobalOption("plugins", "mdk-braw:mdk-r3d"); // 注册BRAW和R3D插件
     }
 
     if cfg!(target_os = "linux") {
         // Init wgpu before Qt because of a bug in `khronos-egl`
-        gyroflow_core::gpu::wgpu::WgpuWrapper::list_devices();
+        gyroflow_core::gpu::wgpu::WgpuWrapper::list_devices(); // 获取所有可用的GPU设备
     }
 
-    let _ = external_sdk::cleanup();
+    let _ = external_sdk::cleanup(); // 清理以"zz-remove-me-"开头的文件
 
-    let ctl = RefCell::new(controller::Controller::new());
-    let ctlpinned = unsafe { QObjectPinned::new(&ctl) };
+    // 创建一个Rust结构体Controller的实例，这是我们应用程序的核心逻辑。将这个Rust实例安全地暴露给C++的Qt框架
+    // 以便Qt的界面元素（如按钮）可以调用这个Rust实例的方法（作为“槽”），并且这个Rust实例可以发出“信号”。
+    // 为了实现这一点，必须解决两个问题： 1.可变性问题： Qt的回调（槽）需要能够修改Controller的状态，但这可能与Rust借用规则冲突
+    // 2.内存位置问题： Qt框架会持有指向Rust的对象的原始指针，Rust的内存模型允许移动对象，如果对象被移动，Qt持有的指针就会失效
+    let ctl = RefCell::new(controller::Controller::new()); // 使可以安全的修改应用状态
+    let ctlpinned = unsafe { QObjectPinned::new(&ctl) }; // 固定Controller实例的内存位置，确保Qt可以安全地访问它
 
     let ui_tools = RefCell::new(UITools::default());
     let ui_tools_pinned = unsafe { QObjectPinned::new(&ui_tools) };
@@ -233,15 +241,16 @@ fn entry() {
         #endif
     });
 
-    ctl.borrow_mut().stabilizer.params.write().framebuffer_inverted = util::is_opengl();
+    ctl.borrow_mut().stabilizer.params.write().framebuffer_inverted = util::is_opengl(); // 查询当前的 Qt/QML 图形渲染后端是否正在使用 OpenGL
 
     rendering::init_log();
 
     engine.set_property("openFileOnStart".into(), QUrl::from(QString::from(gyroflow_core::filesystem::path_to_url(&open_file))).into());
 
     engine.set_property("defaultInitializedDevice".into(), QString::default().into());
+    // 判断是否启用了OpenCL或wgpu作为GPU后端
     if let Some((name, list_name)) = core::gpu::initialize_contexts() {
-        rendering::set_gpu_type_from_name(&name);
+        rendering::set_gpu_type_from_name(&name); // 设置渲染使用的GPU类型
         engine.set_property("defaultInitializedDevice".into(), QString::from(list_name).into());
     }
 
@@ -258,6 +267,7 @@ pub extern fn main(_argc: i32, _argv: *mut *mut i8) -> i32 {
     0
 }
 
+// 条件编译，不是Android平台，则使用标准的main函数入口
 #[cfg(not(target_os = "android"))]
 fn main() {
     entry();

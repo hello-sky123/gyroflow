@@ -116,10 +116,13 @@ impl Smoothing {
         self.algs.0.iter().map(|x| x.get_name()).collect()
     }
 
+    // 'a是一个生命周期参数，表示返回的数据如果是借用，不能比输入的quats活得更久
     pub fn get_trimmed_quats<'a>(quats: &'a TimeQuat, duration_ms: f64, trim_range_only: bool, trim_ranges: &[(f64, f64)]) -> Cow<'a, TimeQuat> {
+        // 如果需要修剪
         if trim_range_only && !trim_ranges.is_empty() {
             let mut quats_copy = quats.clone();
             let ranges = trim_ranges.iter().map(|x| ((x.0 * duration_ms * 1000.0).round() as i64, (x.1 * duration_ms * 1000.0).round() as i64)).collect::<Vec<_>>();
+            // .range()返回一个迭代器，这个迭代器会遍历map中所有键位于指定范围内的键值对，ranges是一个Vec<(i64, i64)>，表示时间戳范围，.first()返回第一个修剪范围，..表示无穷
             let mut prev_q = quats.range(ranges.first().unwrap().0..).next().map(|(&a, &b)| (a, b));
             let mut next_q = prev_q;
             let mut range = ranges.first().unwrap();
@@ -130,6 +133,7 @@ impl Smoothing {
                         current_range += 1;
                         range = next_range;
                     } else {
+                        // 从map开始到最后一个保留范围的结束时间戳
                         prev_q = quats.range(..ranges.last().unwrap().1).next_back().map(|(&a, &b)| (a, b));
                         next_q = prev_q;
                         range = &(i64::MAX, i64::MAX);

@@ -65,22 +65,32 @@ impl Drop for WgpuWrapper {
     }
 }
 
+// 初始化与缓存GPU相关的全局状态
 lazy_static::lazy_static! {
+    // 全局的wgpu::Instance对象，它是GPU API的主入口点
     static ref INSTANCE: Mutex<wgpu::Instance> = Mutex::new(wgpu::Instance::new(&wgpu::InstanceDescriptor::default()));
+    // Vec<Adapter缓存所有已枚举到的GPU适配器（例如独显、集显）
     static ref ADAPTERS: RwLock<Vec<Adapter>> = RwLock::new(Vec::new());
-    static ref ADAPTER: AtomicUsize = AtomicUsize::new(0);
+    static ref ADAPTER: AtomicUsize = AtomicUsize::new(0); // 当前选中的适配器索引
 }
 
 const EXCLUSIONS: &[&'static str] = &["Microsoft Basic Render Driver"];
 
 impl WgpuWrapper {
     pub fn list_devices() -> Vec<String> {
+        // 检查缓存的设备列表是否为空
         if ADAPTERS.read().is_empty() {
+            // std::panic::catch_unwind:这是Rust中处理程序崩溃的机制。它像一个try...catch块
             let devices = std::panic::catch_unwind(|| -> Vec<Adapter> {
+                // lock获取对全局wgpu实例的独占访问权，enumerate_adapters列出所有后端（Vulkan，Metal，D3D12）上的所有物理GPU
+                // 转换为迭代器并过滤，只保留那些名字中不包含任何黑名单字符串的设备，.collect()将所有通过过滤的设备收集到一个 `Vec<Adapter>` 中
                 INSTANCE.lock().enumerate_adapters(wgpu::Backends::all()).into_iter().filter(|x| !EXCLUSIONS.iter().any(|e| x.get_info().name.contains(e))).collect()
             });
+            // 处理枚举结果
             match devices {
+                // 成功的情况，获取一个写锁，准备更新缓存，将新发现的设备列表devices存入全局缓存ADAPTERS中
                 Ok(devices) => { *ADAPTERS.write() = devices; },
+                // 发生panic的情况
                 Err(e) => {
                     if let Some(s) = e.downcast_ref::<&str>() {
                         log::error!("Failed to initialize wgpu {}", s);
@@ -93,6 +103,7 @@ impl WgpuWrapper {
             }
         }
 
+        // 返回当前缓存的适配器列表，映射每个适配器到一个字符串，包含设备名称和后端类型
         ADAPTERS.read().iter().map(|x| { let x = x.get_info(); format!("{} ({:?})", x.name, x.backend) }).collect()
     }
 

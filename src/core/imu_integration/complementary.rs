@@ -5,7 +5,7 @@
 // https://www.mdpi.com/1424-8220/15/8/19302
 
 #[allow(dead_code)]
-const GRAVITY: f64 = 9.81;
+const GRAVITY: f64 = 9.81; // 编译器属性宏，即使这个变量未使用也不会发出警告
 // Bias estimation steady state thresholds
 const ANGULAR_VELOCITY_THRESHOLD: f64 = 0.2;
 const ACCELERATION_THRESHOLD: f64 = 0.1;
@@ -26,7 +26,7 @@ pub struct ComplementaryFilter {
     pub steady_state: bool,
 
     // The orientation as a Hamilton quaternion (q.0 is the scalar). Represents the orientation of the fixed frame wrt the body frame.
-    q: (f64, f64, f64, f64),
+    q: (f64, f64, f64, f64), // 浮点类型的元组，元素个数可变
 
     // Bias in angular velocities;
     w_prev: (f64, f64, f64),
@@ -35,6 +35,8 @@ pub struct ComplementaryFilter {
     w_bias: (f64, f64, f64),
 }
 
+// Default是Rust标准库中的一个基础trait，用于为类型提供合理的默认值，任何实现这个trait的类型必须提供default()方法，返回该类型的实例
+// 当你调用let filter = ComplementaryFilter::default();就会得到结构体的一个“默认值版本”
 impl Default for ComplementaryFilter {
     fn default() -> Self {
         Self {
@@ -54,7 +56,9 @@ impl Default for ComplementaryFilter {
 
 #[allow(dead_code)]
 impl ComplementaryFilter {
+    // 设置加速度计的校正增益（gain_acc），并返回设置是否成功。
     pub fn set_gain_acc(&mut self, gain: f64) -> bool {
+        // ..=是Rust的闭区间运算符，检查给定值是否在范围内
         if (0.0..=1.0).contains(&gain) {
             self.gain_acc = gain;
             true
@@ -62,6 +66,8 @@ impl ComplementaryFilter {
             false
         }
     }
+
+    // 设置磁力计的校正增益（gain_mag），并返回设置是否成功。
     pub fn set_gain_mag(&mut self, gain: f64) -> bool {
         if (0.0..=1.0).contains(&gain) {
             self.gain_mag = gain;
@@ -70,6 +76,7 @@ impl ComplementaryFilter {
             false
         }
     }
+
     pub fn set_bias_alpha(&mut self, bias_alpha: f64) -> bool {
         if (0.0..=1.0).contains(&bias_alpha) {
             self.bias_alpha = bias_alpha;
@@ -96,7 +103,7 @@ impl ComplementaryFilter {
 
     // Update from accelerometer and gyroscope data.
     // [ax, ay, az]: Normalized gravity vector.
-    // [wx, wy, wz]: Angular veloctiy, in rad / s.
+    // [wx, wy, wz]: Angular velocity, in rad / s.
     // dt: time delta, in seconds.
     pub fn update(&mut self, ax: f64, ay: f64, az: f64, wx: f64, wy: f64, wz: f64, dt: f64) {
         if !self.initialized {
@@ -115,7 +122,7 @@ impl ComplementaryFilter {
         let pred = self.get_prediction(wx, wy, wz, dt);
 
         // Correction (from acc):
-        // q_ = q_pred * [(1-gain) * qI + gain * dq_acc]
+        // q_ = q_pred * [(1 - gain) * qI + gain * dq_acc]
         // where qI = identity quaternion
         let mut dq_acc = self.get_acc_correction(ax, ay, az, pred.0, pred.1, pred.2, pred.3);
 
@@ -134,7 +141,7 @@ impl ComplementaryFilter {
 
     // Update from accelerometer, gyroscope, and magnetometer data.
     // [ax, ay, az]: Normalized gravity vector.
-    // [wx, wy, wz]: Angular veloctiy, in rad / s.
+    // [wx, wy, wz]: Angular velocity, in rad / s.
     // [mx, my, mz]: Magnetic field, units irrelevant.
     // dt: time delta, in seconds.
     pub fn update_mag(&mut self, ax: f64, ay: f64, az: f64, wx: f64, wy: f64, wz: f64, mx: f64, my: f64, mz: f64, dt: f64) {
@@ -154,7 +161,7 @@ impl ComplementaryFilter {
         let pred = self.get_prediction(wx, wy, wz, dt);
 
         // Correction (from acc):
-        // q_ = q_pred * [(1-gain) * qI + gain * dq_acc]
+        // q_ = q_pred * [(1 - gain) * qI + gain * dq_acc]
         // where qI = identity quaternion
         let mut dq_acc = self.get_acc_correction(ax, ay, az, pred.0, pred.1, pred.2, pred.3);
 
@@ -168,7 +175,7 @@ impl ComplementaryFilter {
         let q_temp = quaternion_multiplication(pred.0, pred.1, pred.2, pred.3, dq_acc.0, dq_acc.1, dq_acc.2, dq_acc.3);
 
         // Correction (from mag):
-        // q_ = q_temp * [(1-gain) * qI + gain * dq_mag]
+        // q_ = q_temp * [(1 - gain) * qI + gain * dq_mag]
         // where qI = identity quaternion
         let mut dq_mag = self.get_mag_correction(mx, my, mz, q_temp.0, q_temp.1, q_temp.2, q_temp.3);
 
@@ -180,7 +187,7 @@ impl ComplementaryFilter {
     }
 
     fn update_biases(&mut self, ax: f64, ay: f64, az: f64, wx: f64, wy: f64, wz: f64) {
-        self.steady_state = self.check_state(ax, ay, az, wx, wy, wz);
+        self.steady_state = self.check_state(ax, ay, az, wx, wy, wz); // 检查是否处于稳态（相对静止）
 
         if self.steady_state {
             self.w_bias.0 += self.bias_alpha * (wx - self.w_bias.0);
@@ -192,7 +199,7 @@ impl ComplementaryFilter {
     }
 
     fn check_state(&self, ax: f64, ay: f64, az: f64, wx: f64, wy: f64, wz: f64) -> bool {
-        let acc_magnitude = (ax*ax + ay*ay + az*az).sqrt();
+        let acc_magnitude = (ax * ax + ay * ay + az * az).sqrt();
         if (acc_magnitude - GRAVITY).abs() > ACCELERATION_THRESHOLD {
             return false;
         }
@@ -212,15 +219,17 @@ impl ComplementaryFilter {
         true
     }
 
+    // 通过陀螺仪的角速度和时间增量来预测下一个四元数
     fn get_prediction(&self, wx: f64, wy: f64, wz: f64, dt: f64) -> (f64, f64, f64, f64) {
-        let wx_unb = wx - self.w_bias.0;
+        let wx_unb = wx - self.w_bias.0; // wx_unb表示去除偏置后的角速度
         let wy_unb = wy - self.w_bias.1;
         let wz_unb = wz - self.w_bias.2;
 
-        let mut q0_pred = self.q.0 + 0.5*dt*( wx_unb*self.q.1 + wy_unb*self.q.2 + wz_unb*self.q.3);
-        let mut q1_pred = self.q.1 + 0.5*dt*(-wx_unb*self.q.0 - wy_unb*self.q.3 + wz_unb*self.q.2);
-        let mut q2_pred = self.q.2 + 0.5*dt*( wx_unb*self.q.3 - wy_unb*self.q.0 - wz_unb*self.q.1);
-        let mut q3_pred = self.q.3 + 0.5*dt*(-wx_unb*self.q.2 + wy_unb*self.q.1 - wz_unb*self.q.0);
+        // 见式42
+        let mut q0_pred = self.q.0 + 0.5 * dt * (wx_unb * self.q.1 + wy_unb * self.q.2 + wz_unb * self.q.3);
+        let mut q1_pred = self.q.1 + 0.5 * dt * (-wx_unb * self.q.0 - wy_unb * self.q.3 + wz_unb * self.q.2);
+        let mut q2_pred = self.q.2 + 0.5 * dt * (wx_unb * self.q.3 - wy_unb * self.q.0 - wz_unb * self.q.1);
+        let mut q3_pred = self.q.3 + 0.5 * dt * (-wx_unb * self.q.2 + wy_unb * self.q.1 - wz_unb * self.q.0);
 
         normalize_quaternion(&mut q0_pred, &mut q1_pred, &mut q2_pred, &mut q3_pred);
 
@@ -235,6 +244,7 @@ impl ComplementaryFilter {
         // Normalize acceleration vector.
         normalize_vector(&mut ax, &mut ay, &mut az);
 
+        // 见公式25
         if az >= 0.0 {
             let q0_meas = ((az + 1.0) * 0.5).sqrt();
             (
@@ -280,13 +290,13 @@ impl ComplementaryFilter {
         };
 
         // [lx, ly, lz] is the magnetic field reading, rotated into the intermediary frame by the inverse of q_acc.
-        // l = R(q_acc)^-1 m
+        // l = R(q_acc)^-1 m，q_acc的z分量为0
         let lx = (q_acc.0 * q_acc.0 + q_acc.1 * q_acc.1 - q_acc.2 * q_acc.2) * mx + 2.0 * (q_acc.1 * q_acc.2) * my - 2.0 * (q_acc.0 * q_acc.2) * mz;
         let ly = 2.0 * (q_acc.1 * q_acc.2) * mx + (q_acc.0 * q_acc.0 - q_acc.1 * q_acc.1 + q_acc.2 * q_acc.2) * my + 2.0 * (q_acc.0 * q_acc.1) * mz;
 
         // q_mag is the quaternion that rotates the Global frame (North West Up) into the intermediary frame. q1_mag and q2_mag are defined as 0.
-        let gamma = lx * lx + ly * ly;
-        let beta = (gamma + lx * gamma.sqrt()).sqrt();
+        let gamma = lx * lx + ly * ly; // 见式27
+        let beta = (gamma + lx * gamma.sqrt()).sqrt(); // 见式31
         let q0_mag = beta / ((2.0 * gamma).sqrt());
         let q3_mag = ly / (std::f64::consts::SQRT_2 * beta);
 
@@ -302,14 +312,15 @@ impl ComplementaryFilter {
         // )
     }
 
+    // 由预测的重力方向和实际的重力方向计算基于加速度的校正量
     fn get_acc_correction(&mut self, mut ax: f64, mut ay: f64, mut az: f64, p0: f64, p1: f64, p2: f64, p3: f64) -> (f64, f64, f64, f64) {
         // Normalize acceleration vector.
         normalize_vector(&mut ax, &mut ay, &mut az);
 
         // Acceleration reading rotated into the world frame by the inverse predicted quaternion (predicted gravity):
-        let g = rotate_vector_by_quaternion(ax, ay, az, p0, -p1, -p2, -p3);
+        let g = rotate_vector_by_quaternion(ax, ay, az, p0, -p1, -p2, -p3); // 见式44
 
-        // Delta quaternion that rotates the predicted gravity into the real gravity:
+        // Delta quaternion that rotates the predicted gravity into the real gravity: 式47
         let dq0 =  ((g.2 + 1.0) * 0.5).sqrt();
         (
             dq0,
@@ -319,13 +330,14 @@ impl ComplementaryFilter {
         )
     }
 
+    // 由预测的磁场方向和实际的磁场方向计算基于磁力计的校正量
     fn get_mag_correction(&mut self, mx: f64, my: f64, mz: f64, p0: f64, p1: f64, p2: f64, p3: f64) -> (f64, f64, f64, f64) {
         // Magnetic reading rotated into the world frame by the inverse predicted quaternion:
-        let l = rotate_vector_by_quaternion(mx, my, mz, p0, -p1, -p2, -p3);
+        let l = rotate_vector_by_quaternion(mx, my, mz, p0, -p1, -p2, -p3); // 见式54
 
         // Delta quaternion that rotates the l so that it lies in the xz-plane (points north):
-        let gamma = l.0*l.0 + l.1*l.1;
-        let beta = (gamma + l.0*gamma.sqrt()).sqrt();
+        let gamma = l.0 * l.0 + l.1 * l.1;
+        let beta = (gamma + l.0 * gamma.sqrt()).sqrt();
         (
             beta / ((2.0 * gamma).sqrt()),
             0.0,
@@ -335,12 +347,13 @@ impl ComplementaryFilter {
     }
 
     fn get_adaptive_gain(&mut self, alpha: f64, ax: f64, ay: f64, az: f64) -> f64 {
-        let a_mag = (ax * ax + ay * ay + az * az).sqrt();
-        let error = (a_mag - GRAVITY).abs() / GRAVITY;
+        let a_mag = (ax * ax + ay * ay + az * az).sqrt(); // 计算加速度的模长
+        let error = (a_mag - GRAVITY).abs() / GRAVITY; // 计算相对误差
         let error1 = 0.1;
         let error2 = 0.2;
         let m = 1.0 / (error1 - error2);
         let b = 1.0 - m * error1;
+        // 根据误差范围调整增益，见式61
         let factor = if error < error1 {
             1.0
         } else if error < error2 {
@@ -353,8 +366,11 @@ impl ComplementaryFilter {
 }
 
 
+// 三维向量归一化
 fn normalize_vector(x: &mut f64, y: &mut f64, z: &mut f64) {
-    let norm = (*x**x + *y**y + *z**z).sqrt();
+    // *x表示解引用，获取x所引用的值（&x表示我想借用x，但不拥有它）
+    let norm = (*x * *x + *y * *y + *z * *z).sqrt();
+    // 判断是否为有限数且不为零
     if norm.is_finite() && norm != 0.0 {
         *x /= norm;
         *y /= norm;
@@ -362,8 +378,9 @@ fn normalize_vector(x: &mut f64, y: &mut f64, z: &mut f64) {
     }
 }
 
+// 归一化四元数
 fn normalize_quaternion(q0: &mut f64, q1: &mut f64, q2: &mut f64, q3: &mut f64) {
-    let norm = (*q0**q0 + *q1**q1 + *q2**q2 + *q3**q3).sqrt();
+    let norm = (*q0 * *q0 + *q1 * *q1 + *q2 * *q2 + *q3 * *q3).sqrt();
     if norm.is_finite() && norm != 0.0 {
         *q0 /= norm;
         *q1 /= norm;
@@ -372,18 +389,21 @@ fn normalize_quaternion(q0: &mut f64, q1: &mut f64, q2: &mut f64, q3: &mut f64) 
     }
 }
 
+// 单位四元数求逆
 fn invert_quaternion(q0: f64, q1: f64, q2: f64, q3: f64) -> (f64, f64, f64, f64) {
     // Assumes quaternion is normalized.
     (q0, -q1, -q2, -q3)
 }
 
+// 根据旋转角度大小对四元数采用不同的插值方法
 fn scale_quaternion(gain: f64, dq0: &mut f64, dq1: &mut f64, dq2: &mut f64, dq3: &mut f64) {
+    // 实部dq0小于零，意味着旋转角度大于90°
 	if *dq0 < 0.0 { // 0.9
         // Slerp (Spherical linear interpolation):
         let angle = dq0.acos();
         let a = (angle * (1.0 - gain)).sin() / angle.sin();
         let b = (angle * gain).sin() / angle.sin();
-        *dq0 = a + b * *dq0;
+        *dq0 = a + b * *dq0; // 使用方法3进行球面插值
         *dq1 *= b;
         *dq2 *= b;
         *dq3 *= b;
@@ -398,19 +418,21 @@ fn scale_quaternion(gain: f64, dq0: &mut f64, dq1: &mut f64, dq2: &mut f64, dq3:
     normalize_quaternion(dq0, dq1, dq2, dq3);
 }
 
+// 四元数乘法
 fn quaternion_multiplication(p0: f64, p1: f64, p2: f64, p3: f64, q0: f64, q1: f64, q2: f64, q3: f64) -> (f64, f64, f64, f64) {
     ( // r = p q
-        p0*q0 - p1*q1 - p2*q2 - p3*q3,
-        p0*q1 + p1*q0 + p2*q3 - p3*q2,
-        p0*q2 - p1*q3 + p2*q0 + p3*q1,
-        p0*q3 + p1*q2 - p2*q1 + p3*q0
+        p0 * q0 - p1 * q1 - p2 * q2 - p3 * q3,
+        p0 * q1 + p1 * q0 + p2 * q3 - p3 * q2,
+        p0 * q2 - p1 * q3 + p2 * q0 + p3 * q1,
+        p0 * q3 + p1 * q2 - p2 * q1 + p3 * q0
     )
 }
 
+// 四元数乘以一个向量以实现旋转
 fn rotate_vector_by_quaternion(x: f64, y: f64, z: f64, q0: f64, q1: f64, q2: f64, q3: f64) -> (f64, f64, f64) {
     (
-        (q0*q0 + q1*q1 - q2*q2 - q3*q3)*x + 2.0*(q1*q2 - q0*q3)*y + 2.0*(q1*q3 + q0*q2)*z,
-        2.0*(q1*q2 + q0*q3)*x + (q0*q0 - q1*q1 + q2*q2 - q3*q3)*y + 2.0*(q2*q3 - q0*q1)*z,
-        2.0*(q1*q3 - q0*q2)*x + 2.0*(q2*q3 + q0*q1)*y + (q0*q0 - q1*q1 - q2*q2 + q3*q3)*z
+        (q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3) * x + 2.0 * (q1 * q2 - q0 * q3) * y + 2.0 * (q1 * q3 + q0 * q2) * z,
+        2.0 * (q1 * q2 + q0 * q3) * x + (q0 * q0 - q1 * q1 + q2 * q2 - q3 * q3) * y + 2.0 * (q2 * q3 - q0 * q1) * z,
+        2.0 * (q1 * q3 - q0 * q2) * x + 2.0 * (q2 * q3 + q0 * q1) * y + (q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3) * z
     )
 }

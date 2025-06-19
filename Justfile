@@ -1,8 +1,10 @@
 set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 
-BaseFile := os()
+BaseFile := os() # os()返回当前操作系统的名称（小写字符串）
 
+# 定义一个名为run的命令，*param可以接受任意数量的参数（零个或者多个）
 run *param:
+    # 使用just命令执行另一个just文件，-f选项指定要使用的justfile
     just -f _scripts/{{BaseFile}}.just run {{param}}
 
 test *param:

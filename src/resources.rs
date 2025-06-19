@@ -3,6 +3,8 @@
 
 use qmetaobject::qrc;
 
+// qrc!宏是qmetaobject crate提供的宏，用于将Rust项目中构建Qt样式的资源文件（QRC），它的功能与C++ Qt中的.qrc文件相同
+// 将图片、QML文件、着色器、翻译文件等资源打包进最终可执行文件，并通过Qt的qrc:/路径访问它们
 qrc!(pub rsrc,
     "/" {
         "src/ui/components/qmldir",

@@ -3,28 +3,33 @@
 
 use serde::{ Serialize, Deserialize };
 
+// 实时解析嵌入视频文件或来自其他遥测数据的元数据的工具，支持多种格式GoPro, Sony, Insta360等
 use telemetry_parser::Input;
 use telemetry_parser::tags_impl::{ GetWithType, GroupId, TagId };
 use std::io::Result;
 
+// 创建一个精确、唯一的标识，用来描述拍摄某个视频时所使用的相机、镜头和所有相关设置，Gyroflow需要这个精确的指纹来查找并
+// 应用完全匹配的镜头配置文件，因为即使是同一台相机，在不同的设置下（如不同的分辨率、帧率或数码变焦模式），其镜头畸变特性也可能完全不同
 #[derive(Deserialize, Serialize, Default, Clone, Debug)]
-#[serde(default)]
+#[serde(default)] // 允许在反序列化时使用默认值填充缺失的字段
 pub struct CameraIdentifier {
-    pub brand: String,
-    pub model: String,
-    pub lens_model: String,
-    pub lens_info: String,
-    pub focal_length: Option<f64>,
+    pub brand: String, // 相机品牌，如GoPro, Sony, Insta360等
+    pub model: String, // 相机型号，可能是Hero 11 Black等
+    pub lens_model: String, // 镜头型号，可能是FE 24-70mm F2.8 GM等
+    pub lens_info: String, // 镜头信息，可能包含用户备注或从元数据中提取的更详细的描述
+    pub focal_length: Option<f64>, // 焦距，单位为毫米，可能是None表示未知或未提供
+    // 相机设置，通常指相机的“数码镜头”或“视场角（FOV）”设置。GoPro上，这可能是"SuperView", "Wide", "Linear", "Linear + Horizon Leveling"
     pub camera_setting: String,
-    pub fps: usize,
-    pub video_width: usize,
+    pub fps: usize, // 帧率，单位为帧每秒（FPS），通常是30, 60, 120等
+    pub video_width: usize, // 视频分辨率
     pub video_height: usize,
     pub additional: String,
 
-    pub identifier: String
+    pub identifier: String // 生成的唯一标识符，通常是一个字符串，包含品牌、型号、镜头信息、分辨率和帧率等信息
 }
 
 impl CameraIdentifier {
+    // input包含了从视频文件中提取的所有元数据和传感器数据
     pub fn from_telemetry_parser(input: &Input, video_width: usize, video_height: usize, fps: f64) -> Result<Self> {
         let fps = (fps * 1000.0).round() as usize;
         let brand = input.camera_type();
@@ -40,9 +45,10 @@ impl CameraIdentifier {
             ..Default::default()
         };
 
+        // 将品牌名转换为小写后匹配，如果是runcam或caddx，则将镜头信息设置为"wide"
         match id.brand.to_ascii_lowercase().as_str() {
-            "runcam" | "caddx" => id.lens_info = "wide".into(),
-            _ => { }
+            "runcam" | "caddx" => id.lens_info = "wide".into(), // into自动推到类型
+            _ => { } // _通配符，{}表示不做任何操作
         }
 
         if !id.brand.is_empty() {
@@ -50,6 +56,7 @@ impl CameraIdentifier {
         }
 
         match brand.as_str() {
+            // 解析和翻译GoPro视频文件中独特的元数据，并将这些信息填充到CameraIdentifier中
             "GoPro" => {
                 if let Some(ref samples) = input.samples {
                     for info in samples {

@@ -16,7 +16,7 @@ fn compile_qml(dir: &str, qt_include_path: &str, qt_library_path: &str) {
         config.include(format!("{}/QtCore.framework/Headers/", qt_library_path));
         config.include(format!("{}/QtQml.framework/Headers/", qt_library_path));
     }
-    for f in std::env::var("DEP_QT_COMPILE_FLAGS").unwrap().split_terminator(';') {
+    for f in env::var("DEP_QT_COMPILE_FLAGS").unwrap().split_terminator(';') {
         config.flag(f);
     }
 
@@ -41,7 +41,7 @@ fn compile_qml(dir: &str, qt_include_path: &str, qt_library_path: &str) {
         }
     });
 
-    let qt_path = std::path::Path::new(qt_library_path).parent().unwrap();
+    let qt_path = Path::new(qt_library_path).parent().unwrap();
     let compiler_path = if qt_path.join("libexec/qmlcachegen").exists() {
         qt_path.join("libexec/qmlcachegen").to_string_lossy().to_string()
     } else if qt_path.join("../macos/libexec/qmlcachegen").exists() {
@@ -72,26 +72,33 @@ fn compile_qml(dir: &str, qt_include_path: &str, qt_library_path: &str) {
 }
 
 fn main() {
+    // 这些DEP_*环境变量通常由依赖crate提供，比如qmetaobject或qttypes库的构建脚本设置
     let qt_include_path = env::var("DEP_QT_INCLUDE_PATH").unwrap();
     let qt_library_path = env::var("DEP_QT_LIBRARY_PATH").unwrap();
-    let qt_version      = env::var("DEP_QT_VERSION").unwrap();
+    let qt_version = env::var("DEP_QT_VERSION").unwrap();
 
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap(); // 这个环境变量由Cargo设置，表示当前的目标操作系统
 
+    // OUT_DIR是Cargo自动提供的环境变量，表示构建输出目录，判断是否成功获取路径
     if let Ok(out_dir) = env::var("OUT_DIR") {
+        // 告诉Rust编译器，项目中存在一个名为compiled_qml的配置选项，允许代码中使用 #[cfg(compiled_qml)]
         println!("cargo::rustc-check-cfg=cfg(compiled_qml)");
+        // 判断当前构建是否处于部署路径或构建的是移动平台（Android或iOS）
         if out_dir.contains("\\deploy\\build\\") || out_dir.contains("/deploy/build/") || target_os == "android" || target_os == "ios" {
+            // 调用自定义函数编译QML文件
             compile_qml("src/ui/", &qt_include_path, &qt_library_path);
             println!("cargo:rustc-cfg=compiled_qml");
         }
     }
 
-    let mut config = cpp_build::Config::new();
+    let mut config = cpp_build::Config::new(); // 创建一个新的C++编译配置对象
 
+    // 读取环境变量DEP_QT_COMPILE_FLAGS，通常由qt_build.rs或上游crate提供
     for f in env::var("DEP_QT_COMPILE_FLAGS").unwrap().split_terminator(';') {
         config.flag(f);
     }
     // config.define("QT_QML_DEBUG", None);
+    // 告诉Cargo：如果src/qt_gpu/qrhi_undistort.cpp发生变化，就重新运行build.rs脚本并重新编译。否则Cargo会缓存构建结果，不重新生成
     println!("cargo:rerun-if-changed=src/qt_gpu/qrhi_undistort.cpp");
 
     if target_os == "ios" {
@@ -165,12 +172,15 @@ fn main() {
         println!("cargo:rustc-link-lib=framework=Security");
     }
 
+    // 定义一个可变闭包public_include，它接受一个参数name（例如QtCore，QtGui），闭包体中为每一个模块名设置对应的头文件路径
     let mut public_include = |name| {
+        // 特殊处理macOS平台的头文件路径
         if cfg!(target_os = "macos") {
             config.include(format!("{}/{}.framework/Headers/", qt_library_path, name));
         }
         config.include(format!("{}/{}", qt_include_path, name));
     };
+    // 应用public_include闭包，为每个Qt模块添加头文件路径
     public_include("QtCore");
     public_include("QtGui");
     public_include("QtQuick");
@@ -182,7 +192,7 @@ fn main() {
             config.include(format!("{}/{}.framework/Headers/{}",       qt_library_path, name, qt_version));
             config.include(format!("{}/{}.framework/Headers/{}/{}",    qt_library_path, name, qt_version, name));
         }
-        config.include(format!("{}/{}/{}",    qt_include_path, name, qt_version))
+        config.include(format!("{}/{}/{}", qt_include_path, name, qt_version))
               .include(format!("{}/{}/{}/{}", qt_include_path, name, qt_version, name));
     };
     private_include("QtCore");
@@ -192,32 +202,36 @@ fn main() {
 
     match target_os.as_str() {
         "android" => {
-            println!("cargo:rustc-link-search={}/lib/arm64-v8a", std::env::var("FFMPEG_DIR").unwrap());
-            println!("cargo:rustc-link-search={}/lib", std::env::var("FFMPEG_DIR").unwrap());
-            config.include(format!("{}/include", std::env::var("FFMPEG_DIR").unwrap()));
+            println!("cargo:rustc-link-search={}/lib/arm64-v8a", env::var("FFMPEG_DIR").unwrap());
+            println!("cargo:rustc-link-search={}/lib", env::var("FFMPEG_DIR").unwrap());
+            config.include(format!("{}/include", env::var("FFMPEG_DIR").unwrap()));
         },
         "macos" | "ios" => {
-            println!("cargo:rustc-link-search={}/lib", std::env::var("FFMPEG_DIR").unwrap());
+            println!("cargo:rustc-link-search={}/lib", env::var("FFMPEG_DIR").unwrap());
             println!("cargo:rustc-link-lib=static:+whole-archive=x264");
             println!("cargo:rustc-link-lib=static=x265");
         },
         "linux" => {
-            println!("cargo:rustc-link-search={}", std::env::var("OPENCV_LINK_PATHS").unwrap());
-            println!("cargo:rustc-link-search={}/lib/{}", std::env::var("FFMPEG_DIR").unwrap(), std::env::var("FFMPEG_ARCH").unwrap_or("amd64".into()));
-            println!("cargo:rustc-link-search={}/lib", std::env::var("FFMPEG_DIR").unwrap());
+            // 从环境变量OPENCV_LINK_PATHS中读取OpenCV库的链接路径
+            println!("cargo:rustc-link-search={}", env::var("OPENCV_LINK_PATHS").unwrap());
+            // 设置FFmpeg的架构路径，FFMPEG_ARCH是可选的，默认为amd64
+            println!("cargo:rustc-link-search={}/lib/{}", env::var("FFMPEG_DIR").unwrap(), env::var("FFMPEG_ARCH").unwrap_or("amd64".into()));
+            println!("cargo:rustc-link-search={}/lib", env::var("FFMPEG_DIR").unwrap());
             println!("cargo:rustc-link-lib=static:+whole-archive=z");
-            if std::env::var("OPENCV_LINK_PATHS").unwrap_or_default().contains("vcpkg") {
-                std::env::var("OPENCV_LINK_LIBS").unwrap().split(',').for_each(|lib| println!("cargo:rustc-link-lib=static:+whole-archive={}", lib.trim()));
+            // 区分是否是使用vcpkg安装的OpenCV库
+            if env::var("OPENCV_LINK_PATHS").unwrap_or_default().contains("vcpkg") {
+                // 如果是vcpkg安装的OpenCV库，采用静态链接，+whole-archive确保所有符号都包含
+                env::var("OPENCV_LINK_LIBS").unwrap().split(',').for_each(|lib| println!("cargo:rustc-link-lib=static:+whole-archive={}", lib.trim()));
             } else {
-                std::env::var("OPENCV_LINK_LIBS").unwrap().split(',').for_each(|lib| println!("cargo:rustc-link-lib={}", lib.trim()));
+                env::var("OPENCV_LINK_LIBS").unwrap().split(',').for_each(|lib| println!("cargo:rustc-link-lib={}", lib.trim()));
             }
         },
         "windows" => {
             println!("cargo:rustc-link-arg=/EXPORT:NvOptimusEnablement");
             println!("cargo:rustc-link-arg=/EXPORT:AmdPowerXpressRequestHighPerformance");
-            println!("cargo:rustc-link-search={}", std::env::var("OPENCV_LINK_PATHS").unwrap());
-            println!("cargo:rustc-link-search={}\\lib\\{}", std::env::var("FFMPEG_DIR").unwrap(), std::env::var("FFMPEG_ARCH").unwrap_or("x64".into()));
-            println!("cargo:rustc-link-search={}\\lib", std::env::var("FFMPEG_DIR").unwrap());
+            println!("cargo:rustc-link-search={}", env::var("OPENCV_LINK_PATHS").unwrap());
+            println!("cargo:rustc-link-search={}\\lib\\{}", env::var("FFMPEG_DIR").unwrap(), env::var("FFMPEG_ARCH").unwrap_or("x64".into()));
+            println!("cargo:rustc-link-search={}\\lib", env::var("FFMPEG_DIR").unwrap());
             let mut res = winres::WindowsResource::new();
             res.set_icon("resources/app_icon.ico");
             res.set("FileVersion", env!("CARGO_PKG_VERSION"));
@@ -229,6 +243,7 @@ fn main() {
         tos => panic!("unknown target os {:?}!", tos)
     }
 
+    // 根据当前时间生成一个变化频率为10分钟的版本标识值，设置为编译时环境变量BUILD_TIME
     if let Ok(time) = std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH) {
         println!("cargo:rustc-env=BUILD_TIME={}", (time.as_secs() - 1642516578) / 600); // New version every 10 minutes
     }

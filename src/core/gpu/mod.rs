@@ -149,14 +149,18 @@ impl<'a> Buffers<'a> {
     }
 }
 
+// 为应用程序找到并初始化一个可用的高性能计算后端
 pub fn initialize_contexts() -> Option<(String, String)> {
-    #[cfg(feature = "use-opencl")]
+    #[cfg(feature = "use-opencl")] // 判断是否使用了use-opencl特性
     if std::env::var("NO_OPENCL").unwrap_or_default().is_empty() {
+        // 使用std::panic::catch_unwind来捕获可能的panic，并返回Result
         let cl = std::panic::catch_unwind(|| {
-            opencl::OclWrapper::initialize_context(None)
+            opencl::OclWrapper::initialize_context(None) // 尝试初始化OpenCL设备上下文
         });
         match cl {
+            // 如果成功，返回设备名称和平台名称，外层的Ok表示没有panic发生，内层的Ok表示初始化成功，并返回了设备名称
             Ok(Ok(names)) => { return Some(names); },
+            // 没有panic发生，但初始化失败，打印错误信息
             Ok(Err(e)) => { log::error!("OpenCL error init: {:?}", e); },
             Err(e) => {
                 if let Some(s) = e.downcast_ref::<&str>() {
@@ -170,6 +174,7 @@ pub fn initialize_contexts() -> Option<(String, String)> {
         }
     }
 
+    // 如果OpenCL不能使用，尝试使用wgpu作为后端
     if std::env::var("NO_WGPU").unwrap_or_default().is_empty() {
         let wgpu = std::panic::catch_unwind(|| {
             wgpu::WgpuWrapper::initialize_context()

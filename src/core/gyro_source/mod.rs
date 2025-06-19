@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright © 2021-2022 Adrian <adrian.eddy at gmail>
 
-mod file_metadata;
+mod file_metadata; // mod是module（模块）的关键字，用于声明模块
 mod imu_transforms;
 mod sony;
 pub mod splines;
@@ -28,8 +28,16 @@ use crate::StabilizationParams;
 
 const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 
-pub type Quat64 = UnitQuaternion<f64>;
+pub type Quat64 = UnitQuaternion<f64>; // 双精度类型的四元数
+
+// pub struct IMUData {
+//     pub timestamp_ms: f64,
+//     pub gyro: Option<[f64; 3]>, // Option<T>表示一个可选值，有两种可能状态
+//     pub accl: Option<[f64; 3]>, // Some(T)表示有值，None表示没有值
+//     pub magn: Option<[f64; 3]>
+// }
 pub type TimeIMU = telemetry_parser::util::IMUData;
+// BTreeMap是基于B树有序映射容器
 pub type TimeQuat = BTreeMap<i64, Quat64>; // key is timestamp_us
 pub type TimeVec = BTreeMap<i64, Vector3<f64>>; // key is timestamp_us
 

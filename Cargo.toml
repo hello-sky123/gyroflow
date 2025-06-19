@@ -1,115 +1,125 @@
+# TOML文件的头部，下面的键值对用于定义Rust包（crate）的元数据
 [package]
 name = "gyroflow"
 version = "1.6.1"
 authors = ["Adrian <adrian.eddy@gmail.com>", "Elvin Chen"]
 edition = "2021"
-build = "build.rs"
+build = "build.rs" # 指定构建脚本，在编译主项目之前执行
 
 [features]
-default = ["opencv"]
-opencl = ["gyroflow-core/use-opencl"]
+default = ["opencv"] # 默认启用的特性
+opencl = ["gyroflow-core/use-opencl"] # 启用当前crate的opencl feature，就会启用它依赖的gyroflow-core crate中的use-opencl feature
 opencv = ["gyroflow-core/use-opencv"]
 
+# 构建平台不是Android或iOS时启用的特性
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 gyroflow-core = { path = "src/core/", features = ["use-opencv", "use-opencl"] }
+# 跨平台系统关机/重启接口
 system_shutdown = { git = "https://github.com/risoflora/system_shutdown.git", rev = "48ac516" }
-breakpad-sys = "0.2.0"
-trash = "5.2"
+breakpad-sys = "0.2.0" # Google Breakpad崩溃捕捉系统
+trash = "5.2" # 跨平台文件删除到回收站
 # For nle_plugins
 zip = { version = "3", default-features = false, features = ["deflate-flate2"] }
 zip-extensions = { version = "0.8", default-features = false, features = ["deflate-flate2"] }
-runas = "1.2"
-tempfile = "3"
-fs_extra = "1.3"
+runas = "1.2" # 提供以管理员身份运行子进程的能力
+tempfile = "3" # 提供临时文件和目录的创建和管理
+fs_extra = "1.3" # 增强的文件系统操作库
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 gyroflow-core = { path = "src/core/", features = ["use-opencv"] }
 
 [dependencies]
-cstr = "0.2.12"
-cpp = "0.5.9"
-serde = "1.0"
+cstr = "0.2.12" # C风格字符串处理库
+cpp = "0.5.9" # 支持C++和Rust混合编程
+serde = "1.0" # Rust最流行的序列化和反序列化库
 serde_json = "1.0"
-bytemuck = "1.19.0"
-nalgebra = "0.33"
-semver = "1.0.26"
-fastrand = "2.1.0"
-itertools = "0.14.0"
-regex = "1.10.6"
-rayon = "1.10"
+bytemuck = "1.19.0" # 用于零开销地将类型按位转换（内存安全转换）
+nalgebra = "0.33" # 线性代数库，提供向量、矩阵等数学结构
+semver = "1.0.26" # 用于解析和比较语义版本号
+fastrand = "2.1.0" # 提供快速的随机数生成器
+itertools = "0.14.0" # 提供迭代器的增强功能，如组合、分组等
+regex = "1.10.6" # 正则表达式库，用于字符串模式匹配
+rayon = "1.10" # 数据并行库
 
-pollster = "0.4.0"
-futures-intrusive = "0.5.0"
-flate2 = "1.0.35"
-walkdir = "2.5.0"
-mp4-merge = "0.1.10"
-human-sort = "0.2.2"
-argh = "0.1.13"
-indicatif = "0.17"
-rustfft = "6.2.0"
-crc32fast = "1.4.2"
+pollster = "0.4.0" # 异步编程的同步工具库
+futures-intrusive = "0.5.0" # 并发原语，进程间通信
+flate2 = "1.0.35" # 数据压缩库，支持gzip、deflate等格式
+walkdir = "2.5.0" # 递归遍历目录的库
+mp4-merge = "0.1.10" # 用于合并MP4文件的库
+human-sort = "0.2.2" # 实现“人类友好”的字符串排序（比如file2在file10之前）
+argh = "0.1.13" # 命令行参数解析库
+indicatif = "0.17" # 提供进度条和状态信息的库
+rustfft = "6.2.0" # 快速傅里叶变换库
+crc32fast = "1.4.2" # 快速计算CRC32校验和的库
 rodio = { default-features = false, features = ["vorbis"], version = "0.20.1" }
-filetime_creation = "0.2"
+filetime_creation = "0.2" # 获取文件创建时间
 
+# Qt/QML集成套件
 qmetaobject = { version = "0.2.10", default-features = false, features = ["log"] }
 qttypes     = { version = "0.2.12", default-features = false, features = ["required", "qtquick", "qtquickcontrols2"]}
 qml-video-rs = { git = "https://github.com/AdrianEddy/qml-video-rs.git", rev = "2a3bd8b" }
 #qml-video-rs = { path = "../qml-video-rs" }
 
+# FFmpeg媒体处理，codec 编解码处理，filter 视频滤镜处理，format 媒体格式支持，软件音频重采样，软件视频缩放
 ffmpeg-next = { version = "7.1.0", default-features = false, features = ["codec", "filter", "format", "software-resampling", "software-scaling"] }
-lazy_static = "1.5.0"
-parking_lot = "0.12.3"
+lazy_static = "1.5.0" # 允许定义延迟初始化的全局变量
+parking_lot = "0.12.3" # 更快、更轻量级的互斥锁和条件变量实现
 
-simplelog = "0.12.2"
+simplelog = "0.12.2" # 简单的日志记录库
 log = "0.4"
 
-ureq = "3.0"
-url = "2.5.4"
-whoami = "1.5.2"
-tar = "0.4.44"
-lru = "0.14"
-chrono = "0.4"
+ureq = "3.0" # HTTP客户端库，提供简单的API进行网络请求
+url = "2.5.4" # URL解析和处理库
+whoami = "1.5.2" # 获取当前用户和主机信息的库
+tar = "0.4.44" # 用于处理tar归档文件的库
+lru = "0.14" # LRU缓存实现，提供最近最少使用的缓存策略
+chrono = "0.4" # 日期和时间处理库
 
-log-panics = { version = "2.1", features = ["with-backtrace"] }
+log-panics = { version = "2.1", features = ["with-backtrace"] } # 在panic时记录日志
 
+# 防止系统进如休眠/关闭屏幕
 keep-awake = { git = "https://github.com/AdrianEddy/keep-awake-rs.git", rev = "04ce779" }
 
-[patch.crates-io]
+[patch.crates-io] # 覆盖crates.io版本使用定制分支
 qmetaobject = { git = "https://github.com/AdrianEddy/qmetaobject-rs.git", rev = "ff1e23d" }
 qttypes     = { git = "https://github.com/AdrianEddy/qmetaobject-rs.git", rev = "ff1e23d" }
 
-[target.'cfg(target_os = "windows")'.dependencies.windows]
+[target.'cfg(target_os = "windows")'.dependencies.windows] # Windows平台特定的依赖
 version = "0.58.0"
 features = [ "Win32_System_Com", "Win32_System_Console", "Win32_System_SystemServices", "Win32_UI_Shell", "Win32_Foundation", "Wdk_Foundation", "Win32_System_LibraryLoader",
              "Win32_Graphics_Dwm", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Dxgi",
              "Win32_Security", "Win32_Security_Authorization", "Win32_System_WindowsProgramming", "Win32_System_Threading", "Win32_System_Registry",
              "Win32_Storage_Packaging_Appx", "Win32_Storage_FileSystem" ]
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(target_os = "macos")'.dependencies] # macOS平台特定的依赖
 oslog = "0.2"
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 metal = { version = "0.31.0" }
 core-foundation-sys = "0.8.7"
 
-[build-dependencies]
-cpp_build = "0.5.9"
-winres = "0.1.12"
+[build-dependencies] # 构建脚本build.rs所使用的依赖项
+cpp_build = "0.5.9" # 与cpp crate配合使用，编译Rust中的C++代码
+winres = "0.1.12" # Windows资源编译器，用于添加图标等资源到Windows可执行文件
 walkdir = "2.5.0"
-cc = "1.2"
+cc = "1.2" # C/C++编译器构建工具
 
+# 告诉Cargo，请把src/gyroflow.rs编译成叫做gyroflow的可执行文件，默认情况下，Cargo只会在src
+# 目录下寻找main.rs或lib.rs文件，如果想要有多个程序入口或者非默认入口，就需要使用[[bin]]来指定
 [[bin]]
 name = "gyroflow"
 path = "src/gyroflow.rs"
 
+# 定义了一个profile的自定义构建配置，继承了release模式，但加了debug=true，用于保留调试信息
 [profile.profile]
 inherits = "release"
 debug = true
 
+# 用于发布部署构建，重点是性能与最小体积
 [profile.deploy]
 inherits = "release"
-lto = true
-codegen-units = 1
+lto = true # 启用链接时间优化（LTO），跨crate优化整个程序
+codegen-units = 1 # 将代码生成单位限制为1，最大化优化（牺牲编译速度）
 
 [dev-dependencies]
 test-case = "3.3.1"

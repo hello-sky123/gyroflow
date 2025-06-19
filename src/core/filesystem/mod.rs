@@ -77,34 +77,43 @@ pub enum FilesystemError {
     #[error("Java exception: {0:?}")]
     JavaException(#[from] jni::errors::Error)
 }
+
+// 获取当前函数的简短名称
 #[macro_export]
 macro_rules! function_name {
     () => {{
         fn f() {}
+        // 获取函数f的完整类型名，其中会包含当前函数/模块路径，如"my_crate::my_mod::my_func::{{closure}}::f"
         fn type_name_of<T>(_: T) -> &'static str { std::any::type_name::<T>() }
+        // rsplit("::")将完整类型名从右往左以::分割成多个部分，然后find方法查找第一个不是"f"或"{{closure}}"的部分，expect：如果找不到有效的部分，则会触发panic
         type_name_of(f).rsplit("::").find(|&part| part != "f" && part != "{{closure}}").expect("Short function name")
     }};
 }
-#[macro_export]
+
+#[macro_export] // 属性使得这个宏可以在其他模块中使用
+// 声明式宏，匹配规则 ==> 生成代码
 macro_rules! dbg_call {
+    // $($param:ident )*匹配一系列以空格分隔的标识符，param前的$表示一个捕获，param是捕获的名称，indent表示希望捕获的是一个标识符，如变量
+    // $(-> $ret:expr)*匹配一个可选的返回值表达式，->匹配字面上的->，$ret是捕获的名称，expr表示希望捕获的是一个表达式
     ($($param:ident )* $(-> $ret:expr)*) => {{
-        let mut dbg_str = format!("{}", function_name!());
-        $(
+        let mut dbg_str = format!("{}", function_name!()); // 获取当前函数的简短名称
+        $( // 循环处理所有传入参数，stringify!($param)将参数转换为字符串字面量，$param会替换为参数值
             dbg_str.push_str(&format!(" | {}: {}", stringify!($param), $param));
         )*
-        $(
+        $( // 如果有返回值，则将其添加到调试字符串中
             dbg_str.push_str(" -> ");
-            dbg_str.push_str(&format!("{:?}", $ret));
+            dbg_str.push_str(&format!("{:?}", $ret)); // 使用{:?}格式化输出，适用于调试信息
         )*
         log::debug!("{}", dbg_str);
     }};
 }
 macro_rules! result {
+    // $result:expr 匹配一个表达式(通常是要调用的函数)，$param:ident 匹配一系列以逗号分隔的标识符
     ($result:expr $(, $param:ident)*) => {{
-        let ret = $result;
-        dbg_call!($($param )* -> ret);
+        let ret = $result; // 执行传入的表达式（函数调用）
+        dbg_call!($($param )* -> ret); // 使用dbg_call!记录这次调用和它的结果
         match ret {
-            Ok(x) => x,
+            Ok(x) => x, // 如果结果是Ok，直接返回值x
             Err(e) => { log::error!("{e:?}"); Default::default() }
         }
     }};

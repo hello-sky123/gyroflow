@@ -1,17 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright © 2022 Adrian <adrian.eddy at gmail>
 
+// Entry是BTreeMap的高级接口，支持更高效插入或修改操作，FromStr是一个trait，用于把字符串转换为其他类型
 use std::{ collections::BTreeMap, collections::btree_map::Entry, str::FromStr };
 use crate::gyro_source::GyroSource;
+// Arc是一个线程安全的引用计数智能指针
 use std::sync::{ Arc, Mutex }; // parking_lot::Mutex can't be used across catch_unwind
 
+// 声明式宏（declarative macro），用于动态生成一个枚举类型（KeyframeType）和相关的辅助函数
 macro_rules! define_keyframes {
-    ($($name:ident, $color:literal, $text:literal, $format:expr,)*) => {
+    // 宏接受一个重复的模式块，每个块包含4个部分：枚举变体名、颜色代码、显示文本和格式化函数
+    // $($content),* 表示“重复匹配0次或多次”，类似正则表达式中的*
+    ($($name:ident, $color:literal, $text:literal, $format:expr, )*) => {
+        // 派生trait，自动实现常见trait（如Debug，Clone），支持序列化和反序列化，这些trait的功能如下：
+        // Default提供::default()方法，Debug支持println!("{:?}", value)打印，Copy/Clone可按值复制（因为是小枚举）
+        // PartialEq/Eq支持==和!=比较，PartialOrd/Ord支持排序（枚举顺序为依据）
         #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, ::serde::Serialize, ::serde::Deserialize)]
+        // 枚举类型，用于表示不同的关键帧种类
         pub enum KeyframeType {
-            $($name),*
+            $($name),* // 展开为所有传入的变体
         }
+        // 根据关键帧类型返回对应的颜色代码，参数kf是一个不可变引用，返回一个静态生命周期的字符串切片
         pub fn keyframe_color(kf: &KeyframeType) -> &'static str {
+            // $( ... ),* 是宏重复语法，表示这个模式会按多组输入重复展开
+            // 所有KeyframeType::$name => $color将生成一个个match分支
             match kf { $(KeyframeType::$name => $color),* }
         }
         pub fn keyframe_text(kf: &KeyframeType) -> &'static str {
@@ -23,6 +35,9 @@ macro_rules! define_keyframes {
     };
 }
 
+// 利用前面定义的宏，生成一系列关键帧类型（KeyframeType），|v| format!("{:.2}", v)由两部分组成
+// |v|是一个闭包，接受一个参数（类型由上下文推断），函数体：format!("{:.2}", v)
+// 调用format!宏将v格式化为保留2位小数的字符串
 define_keyframes! {
     Fov,                         "#8ee6ea", "FOV",                              |v| format!("{:.2}", v),
     VideoRotation,               "#eae38e", "Video rotation",                   |v| format!("{:.1}°", v),
@@ -54,9 +69,10 @@ define_keyframes! {
 }
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, ::serde::Serialize, ::serde::Deserialize)]
+// 定义常见的缓动（Easing）类型，表示不同的动画缓动效果
 pub enum Easing {
     #[default]
-    NoEasing, // Linear
+    NoEasing, // Linear，设置为默认值
     EaseIn,
     EaseOut,
     EaseInOut
@@ -65,17 +81,19 @@ pub enum Easing {
 #[derive(Debug, Copy, Clone, Default, ::serde::Serialize, ::serde::Deserialize)]
 pub struct Keyframe {
     #[serde(default = "default_id")]
-    pub id: u32,
+    pub id: u32, // 当用serde从JSON反序列化时，如果没有提供字段id，则使用default_id函数生成一个随机的u32作为默认值
     pub value: f64,
     pub easing: Easing
 }
-fn default_id() -> u32 { fastrand::u32(1..) }
+fn default_id() -> u32 { fastrand::u32(1..) } // 生成一个随机的u32，范围从1到u32::MAX，避免0作为默认值
 
 #[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KeyframeManager {
     keyframes: BTreeMap<KeyframeType, BTreeMap<i64, Keyframe>>,
-    gyro_offsets: BTreeMap<i64, f64>,
-    #[serde(skip)]
+    gyro_offsets: BTreeMap<i64, f64>, // 存储陀螺仪偏移量的时间戳和对应的偏移值
+    #[serde(skip)] // 序列化（如保存为 JSON）时跳过这个字段，因为闭包无法被序列化
+    // dyn FnMut可变闭包trait对象（动态分发，允许捕获外部变量）,+ Send表示可以在线程间传递，
+    // 闭包捕获的变量必须具有'static生命周期
     custom_provider: Option<Arc<Mutex<dyn FnMut(&KeyframeManager, &KeyframeType, f64) -> Option<f64> + Send + 'static>>>,
     pub timestamp_scale: Option<f64>,
 }

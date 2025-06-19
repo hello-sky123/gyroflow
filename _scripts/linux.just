@@ -1,6 +1,8 @@
 import 'common.just'
 
+# 检测当前操作系统是否支持apt-get包管理器
 AptGetExists := `which apt-get > /dev/null && echo true || echo false`
+# 架构相关变量（基于Arch变量），ARM64->linux_arm64, x86_64->linux
 QtLinuxArch      := if Arch == "aarch64" { "linux_arm64" } else { "linux" }
 FFmpegLinuxArch  := if Arch == "aarch64" { "arm64"       } else { "amd64" }
 ArchName         := if Arch == "aarch64" { "arm64"       } else { "x86_64" }
@@ -13,20 +15,27 @@ PackageSuffix    := if Arch == "aarch64" { "linux-arm64" } else { "linux64" }
 [no-cd]
 install-deps:
     #!/bin/bash
+    # [no-cd]在当前目录下运行命令，不需要切换到justfile所在目录，set -e表示如果任何命令失败，则脚本将立即退出
     set -e
 
     echo "Installing dependencies $LIBCLANG_PATH {{AptGetExists}}"
     if [ "{{AptGetExists}}" == "true" ]; then
+        # Ubuntu20默认的clang libclang-dev是10，bison pkg-config gperf构建工具链，curl unzip zip网络和压缩工具
         sudo apt-get install -y p7zip-full python3-pip python3-venv clang libclang-dev bison pkg-config gperf curl unzip zip git
+        # libc++-dev LLVM的C++标准库，libva-dev libvdpau-dev视频加速api，mesa-va-drivers Mesa视频加速驱动，其余为OpenCL计算框架支持
         sudo apt-get install -y libc++-dev libva-dev libvdpau-dev libvdpau1 mesa-va-drivers ocl-icd-opencl-dev opencl-headers
+        # libpulse-dev PulseAudio音频系统，libasound-dev ALSA音频系统，libxkbcommon-dev 键盘输入处理
         sudo apt-get install -y libpulse-dev libasound-dev libxkbcommon-dev
+        # libfontconfig1字体配置库，libfreetype6 FreeType字体渲染库，libstdc++-12-dev libstdc++-8-dev C++标准库
         sudo apt-get install -y libfontconfig1 libfreetype6
-        sudo apt-get install -y libstdc++-12-dev || true
-        sudo apt-get install -y libstdc++-8-dev || true
+        # GCC版本的C++标准库，|| true表示如果安装失败也不报错继续执行
+        sudo apt-get install -y libstdc++-11-dev || true
+        sudo apt-get install -y libstdc++-9-dev || true
     fi
 
-    mkdir -p {{ExtDir}}
+    mkdir -p {{ExtDir}} # 创建外部依赖目录
 
+    # 检查OpenCV是否已安装
     if [ ! -f "{{OpenCVPath}}/lib/libopencv_core4.a" ]; then
         echo "Installing OpenCV from vcpkg"
         # OpenCV dependencies
@@ -34,38 +43,46 @@ install-deps:
             sudo apt-get install -y libx11-dev libxft-dev libxext-dev autoconf libtool libglfw3 libgles2-mesa-dev libxrandr-dev libxi-dev libxcursor-dev libxdamage-dev libxinerama-dev libxxf86vm-dev libdbus-1-dev libxtst-dev libdbus-1-dev libxi-dev libxtst-dev libsystemd-dev cmake ninja-build
         fi
 
-        # Install vcpkg
+        # Install vcpkg，非docker环境下强制使用系统二进制包（避免重复下载cmake/ninja）
         if [ "$IN_DOCKER" != "1" ]; then
             export VCPKG_FORCE_SYSTEM_BINARIES=1
         fi
+        # --depth 1表示只克隆最新的提交，避免下载整个历史记录，|| true忽略目录已存在的错误
         git clone --depth 1 https://github.com/Microsoft/vcpkg.git {{ExtDir}}/vcpkg || true
 
+        # 运行引导脚本，初始化vcpkg环境，-disableMetrics禁用远程数据收集
         {{ExtDir}}/vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
-        # Install OpenCV
+        # Install OpenCV，先安装依赖库flatbuffers（平台架构标识{{VcpkgArch}}），发布模式构建
         {{ExtDir}}/vcpkg/vcpkg install "flatbuffers:{{VcpkgArch}}" --cmake-args=-DVCPKG_BUILD_TYPE=release
+        # core OpenCV核心功能，calib3d 相机标定和3D重建，opencl GPU加速支持，thread 多线程支持，intrinsics SIMD指令优化
         {{ExtDir}}/vcpkg/vcpkg install "opencv4[core,calib3d,opencl,thread,intrinsics]:{{VcpkgArch}}" --cmake-args=-DVCPKG_BUILD_TYPE=release
+        # 清理构建缓存
         rm -rf {{ExtDir}}/vcpkg/buildtrees
         rm -rf {{ExtDir}}/vcpkg/downloads
     fi
 
+    # ! -d：检查给定路径不是目录或不存在（即clang未安装）
     if [[ ! -d "${LIBCLANG_PATH}" ]]; then
         if [ "{{AptGetExists}}" == "true" ]; then
             sudo apt-get install -y libclang-13-dev
         fi
     fi
 
+    # 切换到外部依赖目录
     pushd {{ExtDir}}
 
     if [ ! -d "{{ExtDir}}/{{QtVersion}}" ]; then
         echo "Setting up python venv in {{ExtDir}}/venv"
+        # 安装并激活Python虚拟环境
         python3 -m venv "{{ExtDir}}/venv"
         source "{{ExtDir}}/venv/bin/activate"
 
         echo "Installing Qt {{QtVersion}}"
-        # Install Qt
+        # 利用pip Install Qt
         pip3 install -U pip
-        pip3 install -U aqtinstall
+        pip3 install -U aqtinstall # Qt官方安装工具
+        # 使用aqtinstall安装Qt，指定版本和架构，aqtinstall会在当前目录下创建安装目录，安装路径结构为：<当前目录>/<Qt版本>/<架构标识>
         python3 -m aqt install-qt {{QtLinuxArch}} desktop {{QtVersion}}
 
         # For VMware: sudo apt install libpocl2
@@ -86,6 +103,7 @@ install-deps:
         sudo pip3 install appimage-builder==0.9.2
     fi
 
+    # 检查FFmpeg是否已安装
     if [ ! -d "{{FFmpeg}}" ]; then
         echo "Downloading ffmpeg"
 

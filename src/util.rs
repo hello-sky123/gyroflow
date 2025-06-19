@@ -38,6 +38,7 @@ pub fn serde_json_to_qt_object(v: &serde_json::Value) -> QJsonObject {
     map
 }
 
+// 查询当前的Qt/QML图形渲染后端是否正在使用OpenGL
 pub fn is_opengl() -> bool {
     cpp!(unsafe [] -> bool as "bool" {
         return QQuickWindow::graphicsApi() == QSGRendererInterface::OpenGLRhi;
@@ -133,20 +134,27 @@ pub extern "system" fn Java_xyz_gyroflow_MainActivity_urlReceived(_vm: *mut c_vo
         #endif
     });
 }
+
+// *mut c_void是一个类型擦除的、可变裸指针
 pub fn set_url_catcher(ctlptr: *mut c_void) {
+    // cpp!表示将以下代码作为C++来编译和链接，unsafe表示这段代码可能会执行不安全的操作
     cpp!(unsafe [ctlptr as "QObject *"] {
-        globalUrlCatcherPtr = ctlptr;
+        // 将从Rust传来的控制器指针，存储到一个全局的C++指针变量globalUrlCatcherPtr中，这就完成了“注册”过程
+        globalUrlCatcherPtr = ctlptr; // 从现在开始，C++世界知道该向哪个对象发送未来的URL请求
+        // pendingUrl是另一个C++全局变量（可能是QString或QUrl类型）。
+        // 它用来存储在Controller准备好之前就从命令行接收到的那个URL。这里检查这个待处理的URL是否存在
         if (!pendingUrl.isEmpty()) {
             QMetaObject::invokeMethod(globalUrlCatcherPtr, "catch_url_open", Qt::QueuedConnection, Q_ARG(QUrl, QUrl(pendingUrl)));
             pendingUrl.clear();
         }
     });
 }
+
 pub fn register_url_handlers() {
     cpp!(unsafe [] {
         #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
             QDesktopServices::setUrlHandler("content", globalUrlCatcherPtr, "catch_url_open");
-            QDesktopServices::setUrlHandler("file",    globalUrlCatcherPtr, "catch_url_open");
+            QDesktopServices::setUrlHandler("file", globalUrlCatcherPtr, "catch_url_open");
         #endif
     });
 }
@@ -196,11 +204,16 @@ pub fn get_data_location() -> String {
 }
 
 pub fn update_rlimit() {
+    // 它通过内联C++（使用cpp!宏）调用平台系统API来修改文件描述符限制，确保程序在高负载（比如解码大量视频流）时不会触发“打开文件太多”的错误
+    // cpp!宏由cpp crate提供，用于嵌入C/C++代码，并于Rust交互，内联C/C++代码被认为是不安全操作
     cpp!(unsafe [] {
+        // 条件编译，仅在类Unix系统执行以下代码，使用__VAR__ + 0确保宏被正确展开
         #if (__APPLE__ + 0) || (__linux__ + 0)
             // Increase open file limit, because it gets hit pretty quickly with R3D or BRAW in render queue
-            struct rlimit limit;
+            // RLIMIT_NOFILE是系统为每个进程设定的最多可以打开的文件数量（包括socket、pipe等）
+            struct rlimit limit; // 查询当前进程的文件打开限制
             if (::getrlimit(RLIMIT_NOFILE, &limit) == 0) {
+                // 试图将软/硬限制都提升到4096
                 if (limit.rlim_cur < 4096) {
                     limit.rlim_cur = 4096;
                     if (limit.rlim_max < 4096)
@@ -239,11 +252,13 @@ pub fn set_android_context() {
 pub fn init_logging() {
     use simplelog::*;
 
-    let log_config = [ "mp4parse", "wgpu", "naga", "akaze", "ureq", "rustls", "mdk" ]
-        .into_iter()
+    // 构建一个日志配置（log_config），屏蔽mp4parse、wgpu、naga等模块的日志消息
+    let log_config = ["mp4parse", "wgpu", "naga", "akaze", "ureq", "rustls", "mdk"]
+        .into_iter() // 创建一个字符串切片数组，包含要屏蔽的模块名，将其转化为迭代器
+        // 使用fold方法将迭代器中的每个元素添加到ConfigBuilder中，ConfigBuilder::new()创建了一个空的日志配置
         .fold(ConfigBuilder::new(), |mut cfg, x| { cfg.add_filter_ignore_str(x); cfg })
         .build();
-    let file_log_config = [ "mp4parse", "wgpu", "naga", "akaze", "ureq", "rustls" ]
+    let file_log_config = ["mp4parse", "wgpu", "naga", "akaze", "ureq", "rustls"]
         .into_iter()
         .fold(ConfigBuilder::new(), |mut cfg, x| { cfg.add_filter_ignore_str(x); cfg })
         .build();
@@ -278,11 +293,14 @@ pub fn init_logging() {
 }
 
 pub fn install_crash_handler() -> std::io::Result<()> {
+    // 获取当前工作目录，作为.dmp文件的保存位置（返回值为PathBuf可跨平台的路径类型），?操作符：错误时提前返回
     let cur_dir = std::env::current_dir()?;
 
+    // Android/iOS不支持native崩溃文件，因此排除移动平台
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        let os_str = cur_dir.as_os_str();
+        let os_str = cur_dir.as_os_str(); // 将PathBuf转换为OsStr（操作系统原生格式的字符串）
+        // Vec<T>：Rust的动态数组类型，PathChar：Breakpad库中定义的平台无关的路径字符类型
         let path: Vec<breakpad_sys::PathChar> = {
             #[cfg(windows)]
             {
@@ -291,13 +309,15 @@ pub fn install_crash_handler() -> std::io::Result<()> {
             }
             #[cfg(unix)]
             {
-                use std::os::unix::ffi::OsStrExt;
-                Vec::from(os_str.as_bytes())
+                use std::os::unix::ffi::OsStrExt; // 为Unix平台提供的OsStr扩展，Unix系统的路径本质上是任意字节序列
+                Vec::from(os_str.as_bytes()) // 将字节切片&[u8]转换为拥有所有权的Vec<u8>
             }
         };
 
         unsafe {
+            // extern "C"说明这是一个C ABI格式的函数，供Breakpad库调用；path是崩溃转储文件路径指针，path_len是路径长度，_ctx是上下文指针（这里未使用）
             extern "C" fn callback(path: *const breakpad_sys::PathChar, path_len: usize, _ctx: *mut c_void) {
+                // unsafe显式标记不安全操作，使用Rust安全抽象封装原始指针
                 let path_slice = unsafe { std::slice::from_raw_parts(path, path_len) };
 
                 let path = {
@@ -313,9 +333,10 @@ pub fn install_crash_handler() -> std::io::Result<()> {
                     }
                 };
 
-                println!("Crashdump written to {}", path.display());
+                println!("Crashdump written to {}", path.display()); // 告知用户崩溃文件位置
             }
 
+            // 在当前程序中安装崩溃处理器，让Breakpad在程序崩溃时自动生成.dmp转储文件，并调用用户自定义的回调函数
             breakpad_sys::attach_exception_handler(
                 path.as_ptr(),
                 path.len(),
@@ -393,14 +414,18 @@ pub fn qt_graphics_api() -> QString {
     })
 }
 
+// 生成一个版本号，但它不仅仅是返回Cargo.toml中定义版本号。它会根据代码在何处被编译来智能地添加额外的信息，从而极大地增强了软件的可追溯性
 pub fn get_version() -> String {
-    let ver = env!("CARGO_PKG_VERSION");
+    // env!和option_env!宏用于获取编译时环境变量，CARGO_PKG_VERSION是Cargo在构建时自动设置的一个标准环境变量
+    // 它总是存在，其值来源于Cargo.toml中的[package]->version字段
+    let ver = env!("CARGO_PKG_VERSION"); // 获取基础版本号
+    // GITHUB_REF是由GitHub Actions设置，表示触发当前workflow的Git引用（ref）它不会在本地shell或cargo build中自动存在
     if option_env!("GITHUB_REF").map_or(false, |x| x.contains("tags")) {
-        ver.to_string() // Official, tagged version
+        ver.to_string() // Official, tagged version，检查是否是官方发布的标签版本
     } else if let Some(gh_run) = option_env!("GITHUB_RUN_NUMBER") {
-        format!("{} (gh{})", ver, gh_run)
+        format!("{} (gh{})", ver, gh_run) // GITHUB_RUN_NUMBER每次CI运行的唯一编号
     } else if let Some(time) = option_env!("BUILD_TIME") {
-        format!("{} (dev{})", ver, time)
+        format!("{} (dev{})", ver, time) // BUILD_TIME是本地构建时设置的时间戳，表示当前版本是开发版本
     } else {
         ver.to_string()
     }
@@ -409,8 +434,11 @@ pub fn copy_to_clipboard(text: QString) {
     cpp!(unsafe [text as "QString"] { QGuiApplication::clipboard()->setText(text); })
 }
 
+// 找出并保存一个对用户和操作系统来说有意义且稳定的应用程序路径或标识符，而不是临时的、内部的或用户不可见的路径
 pub fn save_exe_location() {
+    // 获取当前可执行文件的完整路径
     if let Ok(exe_path) = std::env::current_exe() {
+        // cfg!宏用于条件编译，检查当前操作系统
         if cfg!(target_os = "macos") {
             if let Some(parent) = exe_path.parent() { // MacOS
                 if let Some(parent) = parent.parent() { // Contents
@@ -420,7 +448,7 @@ pub fn save_exe_location() {
                 }
             }
         } else {
-            #[allow(unused_mut)]
+            #[allow(unused_mut)] // 告诉编译器，如果后面exe_str没有被修改，不要发出“未使用可变性”的警告
             let mut exe_str = exe_path.to_string_lossy().to_string();
 
             #[cfg(target_os = "windows")]
@@ -435,8 +463,10 @@ pub fn save_exe_location() {
                     }
                 }
             }
+            // AppImage会挂载/tmp/.mount的临时目录下，然后从那里开始执行，current_exe会返回这个临时路径
             #[cfg(target_os = "linux")]
             if exe_str.contains("/tmp/.mount") {
+                // 如果是从AppImage临时目录开始运行，尝试获取APPIMAGE环境变量（由AppImage运行时自动设置），其值是.appimage文件的真实路径
                 if let Ok(appimg) = std::env::var("APPIMAGE") {
                     if !appimg.is_empty() {
                         exe_str = appimg;

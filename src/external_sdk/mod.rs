@@ -11,11 +11,17 @@ use std::io::*;
 use std::io;
 use flate2::read::GzDecoder;
 
+// 使用lazy_static这个非常流行的第三方库（crate）来实现全局变量的懒加载初始化。
+// 虽然现代Rust(1.51+)已经内置了std::sync::OnceLock，可以实现类似的功能
+// 创建一个名为SDK_PATH的全局静态变量，它的值通过调用get_sdk_path()函数来初始化，但这个初始化操作只会在SDK_PATH 
+// 第一次被访问时执行一次，并且后续的所有访问都会直接返回第一次计算出的结果
 lazy_static::lazy_static! {
-    pub static ref SDK_PATH: std::io::Result<std::path::PathBuf> = get_sdk_path();
+    pub static ref SDK_PATH: Result<std::path::PathBuf> = get_sdk_path();
 }
 
+// 获取应用程序依赖库的路径
 fn get_sdk_path() -> Result<std::path::PathBuf> {
+    // current_exe()函数返回当前可执行文件的路径，ok_or_else将Option转换为Result
     let mut out_dir = std::env::current_exe()?.parent().ok_or_else(|| Error::new(ErrorKind::Other, "Cannot get exe parent"))?.to_path_buf();
     if cfg!(target_os = "macos") {
         out_dir.push("../Frameworks/");
@@ -110,16 +116,19 @@ pub fn install<F: Fn((f64, &'static str, String)) + Send + Sync + Clone + 'stati
     }
 }
 
+// 清理标记为以"zz-remove-me-"开头的文件
 pub fn cleanup() -> Result<()> {
     let mut out_dir = std::env::current_exe()?.parent().ok_or_else(|| Error::new(ErrorKind::Other, "Cannot get exe parent"))?.to_path_buf();
     if cfg!(target_os = "macos") {
         out_dir.push("../Frameworks/");
     }
+    // 创建一个迭代器来遍历指定目录下的所有文件，flatten将迭代器中的结果扁平化
     walkdir::WalkDir::new(out_dir).into_iter().flatten().for_each(|entry| {
         let path = entry.path();
         if let Some(fname) = path.file_name() {
+            // 检查文件名是否以"zz-remove-me-"开头
             if fname.to_str().unwrap_or("").starts_with("zz-remove-me-") {
-                let _ = std::fs::remove_file(path);
+                let _ = std::fs::remove_file(path); // 尝试删除该文件
             }
         }
     });

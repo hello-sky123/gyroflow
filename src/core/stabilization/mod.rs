@@ -83,53 +83,57 @@ bitflags::bitflags! {
     }
 }
 
+// 这个KernelParams结构体的唯一目的是作为一个数据块，从CPU（运行Rust 代码的主程序）传递到GPU（执行图形计算的硬件）
+// 在Gyroflow中，实际的图像去畸变和稳定变换是在GPU上通过着色器（Shader）程序完成的，因为GPU的并行计算能力极强，
+// 非常适合处理图像的每个像素。这个结构体就包含了GPU着色器在处理一帧图像时所需要知道的所有参数和设置
 // Each parameter must be aligned to 4 bytes and whole struct to 16 bytes
 // Must be kept in sync with: opencl_undistort.cl, wgpu_undistort.wgsl and qt_gpu/undistort.frag
-#[repr(C, packed(4))]
-#[derive(Default, Copy, Clone)]
+#[repr(C, packed(4))] // repr(C)告诉编译器使用C语言的内存布局（保证跨语言兼容性），packed(4)确保每个字段都按4字节对齐
+#[derive(Default, Copy, Clone)] // 实现了Default、Copy和Clone特性，允许创建默认实例、复制和克隆该结构体
 pub struct KernelParams {
-    pub width:             i32, // 4
-    pub height:            i32, // 8
-    pub stride:            i32, // 12
-    pub output_width:      i32, // 16
-    pub output_height:     i32, // 4
-    pub output_stride:     i32, // 8
+    pub width:             i32, // 4，输入视频的宽度（单位：像素）
+    pub height:            i32, // 8，输入视频的高度（单位：像素）
+    pub stride:            i32, // 12，输入图像数据中每行的字节数，不一定等于width * bytes_per_pixel，因为每行末尾可能有填充字节
+    pub output_width:      i32, // 16，输出（稳定后）的视频宽度（单位：像素）
+    pub output_height:     i32, // 4， 输出（稳定后）的视频高度（单位：像素）
+    pub output_stride:     i32, // 8， 输出图像数据中每行的字节数
+    // 用于滚动快门校正的变换矩阵数量，如果为1，则表示没有滚动快门校正，只有主矩阵，如果大于1，则画面会被分成多行，每行使用不同的矩阵进行校正
     pub matrix_count:      i32, // 12 - for rolling shutter correction. 1 = no correction, only main matrix
-    pub interpolation:     i32, // 16
-    pub background_mode:   i32, // 4
-    pub flags:             i32, // 8
-    pub bytes_per_pixel:   i32, // 12
-    pub pix_element_count: i32, // 16
-    pub background:        [f32; 4], // 16
-    pub f:                 [f32; 2], // 8  - focal length in pixels
-    pub c:                 [f32; 2], // 16 - lens center
-    pub k:                 [f32; 12], // 16,16,16 - distortion coefficients
-    pub fov:               f32, // 4
-    pub r_limit:           f32, // 8
-    pub lens_correction_amount:   f32, // 12
-    pub input_vertical_stretch:   f32, // 16
+    pub interpolation:     i32, // 16，插值方法的类型，用于在图像变换时计算像素值，可能的值包括双线性、双三次等
+    pub background_mode:   i32, // 4，当画面被缩放或者旋转后，边缘出现的空白区域的填充方式，可能的值包括使用黑色、镜像等
+    pub flags:             i32, // 8，位运算存储的布尔开关，用于启用或者禁用某些特定的、零散的功能
+    pub bytes_per_pixel:   i32, // 12，每个像素占用的字节数，通常为1（灰度图）、3（RGB）或4（RGBA）
+    pub pix_element_count: i32, // 16，像素元素的数量，通常为1（灰度图）、3（RGB）或4（RGBA），用于处理不同的像素格式
+    pub background:        [f32; 4], // 16，背景颜色的RGBA值，用于填充图像边缘的空白区域，格式为浮点数数组
+    pub f:                 [f32; 2], // 8  - focal length in pixels，焦距，fx、fy
+    pub c:                 [f32; 2], // 16 - lens center，主点cx、cy
+    pub k:                 [f32; 12], // 16,16,16 - distortion coefficients，畸变系数
+    pub fov:               f32, // 4，视场角（FOV），表示相机的视野范围，单位为度
+    pub r_limit:           f32, // 8，畸变校正的半径限制，防止在图像边缘出现极端拉伸
+    pub lens_correction_amount:   f32, // 12，应用镜头校正强度，通常在0.0到1.0之间
+    pub input_vertical_stretch:   f32, // 16，输入画面的拉伸系数，用于校正非正方向像素的视频源
     pub input_horizontal_stretch: f32, // 4
-    pub background_margin:        f32, // 8
+    pub background_margin:        f32, // 8，背景边缘的边距和羽化程度
     pub background_margin_feather:f32, // 12
-    pub canvas_scale:             f32, // 16
-    pub input_rotation:           f32, // 4
+    pub canvas_scale:             f32, // 16，全局缩放系数，即防抖导致的画面放大程度
+    pub input_rotation:           f32, // 4，输入和输出的旋转角度，单位为度
     pub output_rotation:          f32, // 8
-    pub translation2d:            [f32; 2], // 16
-    pub translation3d:            [f32; 4], // 16
+    pub translation2d:            [f32; 2], // 16，在2D平面上的平移量[X, Y]
+    pub translation3d:            [f32; 4], // 16，在3D空间中的平移量[X, Y, Z, W]，W通常为1.0
     pub source_rect:              [i32; 4], // 16 - x, y, w, h
     pub output_rect:              [i32; 4], // 16 - x, y, w, h
-    pub digital_lens_params:      [f32; 4], // 16
-    pub safe_area_rect:           [f32; 4], // 16
-    pub max_pixel_value:          f32, // 4
-    pub distortion_model:         stabilize_spirv::DistortionModel, // 8
-    pub digital_lens:             stabilize_spirv::DistortionModel, // 12
-    pub pixel_value_limit:        f32, // 16
-    pub light_refraction_coefficient: f32, // 4
-    pub plane_index:              i32, // 8
+    pub digital_lens_params:      [f32; 4], // 16，数码变焦效果的具体参数
+    pub safe_area_rect:           [f32; 4], // 16，安全区域矩形，用于在UI上显示一个框，提示用户哪些区域在最极端的防抖情况下也绝对不会被裁掉
+    pub max_pixel_value:          f32, // 4，用于处理HDR（高动态范围）视频，定义像素值的最大范围
+    pub distortion_model:         stabilize_spirv::DistortionModel, // 8，畸变模型
+    pub digital_lens:             stabilize_spirv::DistortionModel, // 12，应用一个虚拟的数码变焦效果，可以在稳定后模拟不同的镜头视角
+    pub pixel_value_limit:        f32, // 16，用于处理HDR（高动态范围）视频，定义像素值的最大范围
+    pub light_refraction_coefficient: f32, // 4，用于水下拍摄校正的光线折射系数
+    pub plane_index:              i32, // 8，在处理多平面视频格式（如 YUV）时，指示当前正在处理的是哪个平面（Y,U,还是V）
     pub reserved1:                f32, // 12
     pub reserved2:                f32, // 16
-    pub ewa_coeffs_p:             [f32; 4], // 16
-    pub ewa_coeffs_q:             [f32; 4], // 16
+    pub ewa_coeffs_p:             [f32; 4], // 16，用于EWA(Elliptical Weighted Average)插值算法的系数
+    pub ewa_coeffs_q:             [f32; 4], // 16，这是一种非常高质量的抗锯齿纹理采样算法，用于在画面有剧烈透视变换时，依然能保持高质量的细节，防止摩尔纹和闪烁
 }
 unsafe impl bytemuck::Zeroable for KernelParams {}
 unsafe impl bytemuck::Pod for KernelParams {}
