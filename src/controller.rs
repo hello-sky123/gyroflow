@@ -298,6 +298,7 @@ pub struct Controller {
 
     ongoing_computations: BTreeSet<u64>,
 
+    // Arc (Atomically-Referenced-Counted)智能指针，相当于std::shared_ptr
     pub stabilizer: Arc<StabilizationManager>,
 }
 
@@ -679,17 +680,22 @@ impl Controller {
     }
 
     fn video_file_loaded(&mut self, player: QJSValue) {
-        let stab = self.stabilizer.clone();
+        let stab = self.stabilizer.clone(); // 创建一个新的Arc指针，引用计数加一
 
+        // player是UI包含的一个视频播放器对象，这个player对象是一个通用的、由C++/Qt FFI桥接层返回的句柄
+        // 类型转换与验证：安全地检查这个通用的player对象是否真的是我们期望的MKDVideoItem类型
         if let Some(vid) = player.to_qobject::<MDKVideoItem>() {
+            // 获取对vid的可变引用，以便可以访问其内部的属性和方法
             let vid = unsafe { &mut *vid.as_ptr() }; // vid.borrow_mut()
+            // 提取视频的元数据
             let duration_ms = vid.duration;
             let fps = vid.frameRate;
-            let frame_count = vid.frameCount as usize;
+            let frame_count = vid.frameCount as usize; // 视频的总帧数
             let video_size = (vid.videoWidth as usize, vid.videoHeight as usize);
 
             self.set_preview_resolution(self.preview_resolution, player);
 
+            // 将这些元数据传递给StabilizationManager
             if duration_ms > 0.0 && fps > 0.0 {
                 stab.init_from_video_data(duration_ms, fps, frame_count, video_size);
                 stab.set_output_size(video_size.0, video_size.1);
@@ -768,6 +774,7 @@ impl Controller {
                     let additional_obj = additional_data.as_object_mut().unwrap();
                     if is_main_video {
                         // Ignore the error here, video file may not contain the telemetry and it's ok
+                        // 加载IMU数据
                         let _ = stab.load_gyro_data(&url, is_main_video, &Default::default(), progress, cancel_flag);
 
                         stab.recompute_undistortion();
@@ -781,6 +788,7 @@ impl Controller {
                             err(("An error occured: %1".to_string(), e.to_string()));
                         }
                     }
+                    // 对IMU估计的旋转姿态进行平滑
                     stab.recompute_smoothness();
 
                     let gyro = stab.gyro.read();
@@ -950,14 +958,16 @@ impl Controller {
         use gyroflow_core::stabilization::RGBA8;
 
         if let Some(vid) = player.to_qobject::<MDKVideoItem>() {
+            // 获取对vid的可变引用，以便可以访问其内部的属性和方法
             let vid1 = unsafe { &mut *vid.as_ptr() }; // vid.borrow_mut()
             let vid = unsafe { &mut *vid.as_ptr() }; // vid.borrow_mut()
 
+            // 设置视频渲染背景颜色
             let bg_color = vid.getBackgroundColor().get_rgba_f();
             self.stabilizer.params.write().background = Vector4::new(bg_color.0 as f32, bg_color.1 as f32, bg_color.2 as f32, bg_color.3 as f32);
             {
                 let mut stab = self.stabilizer.stabilization.write();
-                stab.kernel_flags.set(KernelParamsFlags::DRAWING_ENABLED, true);
+                stab.kernel_flags.set(KernelParamsFlags::DRAWING_ENABLED, true); // 设置DRAWING_ENABLED标志
                 stab.cache_frame_transform = true;
             }
             let request_recompute = util::qt_queued_callback_mut(self, move |this, _: ()| {
@@ -1166,12 +1176,15 @@ impl Controller {
         }
     }
 
+    // 设置稳定器的平滑方法
     fn set_smoothing_method(&mut self, index: usize) -> QJsonArray {
         let params = util::serde_json_to_qt_array(&self.stabilizer.set_smoothing_method(index));
         self.request_recompute();
         self.chart_data_changed();
         params
     }
+
+    // 设置稳定器的平滑参数
     fn set_smoothing_param(&mut self, name: QString, val: f64) {
         self.stabilizer.set_smoothing_param(&name.to_string(), val);
         self.chart_data_changed();
@@ -1191,7 +1204,9 @@ impl Controller {
         util::serde_json_to_qt_array(&serde_json::json!([max_angles.0, max_angles.1, max_angles.2]))
     }
 
+    // 启动一个在后台线程中运行的、耗时的稳定化重新计算任务，同时立即返回，不阻塞主线程（UI线程）
     fn recompute_threaded(&mut self) {
+        // 检查稳定器参数的持续时间是否大于0毫秒（对应是否加载了视频），如果不是，则直接返回
         if self.stabilizer.params.read().duration_ms <= 0.0 { return; }
         let id = self.stabilizer.recompute_threaded(util::qt_queued_callback_mut(self, |this, (id, _discarded): (u64, bool)| {
             if !this.ongoing_computations.contains(&id) {
@@ -1380,6 +1395,7 @@ impl Controller {
         }
     }
 
+    // 设置输出视频的分辨率
     fn set_output_size(&self, w: usize, h: usize) {
         if self.stabilizer.set_output_size(w, h) {
             self.stabilizer.recompute_undistortion();
@@ -1477,6 +1493,7 @@ impl Controller {
         self.request_recompute();
     }
 
+    // entry()函数之后，第一个执行
     fn check_updates(&self) {
         let update = util::qt_queued_callback_mut(self, |this, (version, changelog): (String, String)| {
             this.updates_available(QString::from(version), QString::from(changelog))
@@ -1924,6 +1941,7 @@ impl Controller {
         });
         self.stabilizer.list_gpu_devices(finished);
     }
+
     fn set_rendering_gpu_type_from_name(&self, name: String) {
         rendering::set_gpu_type_from_name(&name);
     }
@@ -2059,6 +2077,7 @@ impl Controller {
         }
     }
 
+    // 判断IMU数据中是否有加速度计数据
     fn has_gravity_vectors(&self) -> bool {
         self.stabilizer.gyro.read().file_metadata.read().gravity_vectors.as_ref().map(|v| !v.is_empty()).unwrap_or_default()
     }
@@ -2253,6 +2272,7 @@ impl Controller {
     }
 
     // ---------- REDline conversion ----------
+    // 调用REDline CLI工具来查找可执行文件的路径，并将其格式转换为给QML使用的QString
     fn find_redline(&self) -> QString {
         QString::from(crate::external_sdk::r3d::REDSdk::find_redline())
     }
@@ -2328,6 +2348,7 @@ impl Controller {
         });
     }
 
+    // 检查是否安装了支持gyroflow插件的专业非线性视频编辑软件（nle），nle插件只支持Windows和macOS
     fn is_nle_installed(&self) -> bool {
         #[cfg(any(target_os = "windows", target_os = "macos"))] {
             crate::nle_plugins::is_nle_installed("openfx") || crate::nle_plugins::is_nle_installed("adobe")

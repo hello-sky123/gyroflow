@@ -65,6 +65,7 @@ thread_local! {
     static CACHED_OPENCL: RefCell<lru::LruCache<u32, opencl::OclWrapper>> = RefCell::new(lru::LruCache::new(std::num::NonZeroUsize::new(15).unwrap()));
 }
 
+// 定义了一个高效的、类型安全的按位标志集合类型
 bitflags::bitflags! {
     #[derive(Default, Clone)]
     pub struct KernelParamsFlags: i32 {

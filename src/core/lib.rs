@@ -532,8 +532,8 @@ impl StabilizationManager {
     }
 
     pub fn recompute_threaded<F: Fn((u64, bool)) + Send + Sync + Clone + 'static>(&self, cb: F) -> u64 {
-        //self.recompute_smoothness();
-        //self.recompute_adaptive_zoom();
+        // self.recompute_smoothness();
+        // self.recompute_adaptive_zoom();
         let mut params = stabilization::ComputeParams::from_manager(self);
         params.calculate_camera_fovs();
 
@@ -1893,8 +1893,10 @@ impl StabilizationManager {
 pub fn timestamp_at_frame(frame: i32, fps: f64) -> f64 { frame as f64 * 1000.0 / fps }
 pub fn frame_at_timestamp(timestamp_ms: f64, fps: f64) -> i32 { (timestamp_ms * (fps / 1000.0)).round() as i32 }
 
+// 线程池封装，将一个闭包cb提交到线程池中异步执行，where语句说明cb必须是以下类型的闭包： 1.FnOnce() 可以被调用一次，适用于消耗闭包内部变量
+// 2.Send 能被安全地在线程间传递，'static 闭包和其捕获的环境没有悬垂引用，声明周期独立于当前函数作用域，F是泛型类型参数
 pub fn run_threaded<F>(cb: F) where F: FnOnce() + Send + 'static {
-    THREAD_POOL.spawn(cb);
+    THREAD_POOL.spawn(cb); // 把闭包提交到线程池中，等待空闲线程执行
 }
 
 use std::str::FromStr;

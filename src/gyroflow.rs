@@ -199,7 +199,7 @@ fn entry() {
     engine.set_property("isMobile".into(), cfg!(any(target_os = "android", target_os = "ios")).into());
     engine.set_property("isSandboxed".into(), gyroflow_core::filesystem::is_sandboxed().into());
 
-    // Get smoothing algorithms
+    // Get smoothing algorithms，设置平滑类型
     engine.set_property("smoothingAlgorithms".into(), QVariant::from(ctl.borrow().get_smoothing_algs()));
 
     let engine_ptr = engine.cpp_ptr();
@@ -254,7 +254,7 @@ fn entry() {
         engine.set_property("defaultInitializedDevice".into(), QString::from(list_name).into());
     }
 
-    engine.exec();
+    engine.exec(); // 启动Qt事件循环
 
     util::unregister_url_handlers();
 }
