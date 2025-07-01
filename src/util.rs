@@ -172,7 +172,11 @@ pub fn dispatch_url_event(url: QUrl) {
         qGuiApp->sendEvent(qGuiApp, &evt);
     });
 }
+
+// 将Qt的QUrl对象转换为一个经过编码的、标准的Rust String
 pub fn qurl_to_encoded(url: QUrl) -> String {
+    // cpp!宏用于在Rust中嵌入和执行C++代码，unsafe是必须的，因为要与外部的C++对象进行交互，[url as "QUrl"]
+    // 捕获Rust变量url，并在C++代码中将其视为QUrl类型。-> QString as "QString"表示C++函数返回一个QString对象
     cpp!(unsafe [url as "QUrl"] -> QString as "QString" {
         return QString(url.toEncoded());
     }).to_string()
