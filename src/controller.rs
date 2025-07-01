@@ -311,6 +311,7 @@ impl Controller {
         }
     }
 
+    // 加载视频时会尝试加载IMU数据，因为有些运动相机（如GoPro）会将IMU数据嵌入到视频文件中。
     fn load_video(&mut self, url: QUrl, player: QJSValue) {
         self.stabilizer.clear();
         let url = util::qurl_to_encoded(url.clone());
@@ -703,6 +704,8 @@ impl Controller {
         }
     }
 
+    // QUrl: IMU数据的路径，类似file:///home/zhangzhongping/Downloads/EKFVIO/EIS/test_data/data/gyroscope.gcsv
+    // is_main_video: 是否是主视频（false），sample_index: 采样索引起始位置（-1表示不指定）
     fn load_telemetry(&mut self, url: QUrl, is_main_video: bool, player: QJSValue, sample_index: i32) {
         let url = util::qurl_to_encoded(url);
         let stab = self.stabilizer.clone();
