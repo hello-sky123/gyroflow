@@ -134,7 +134,7 @@ impl ComplementaryFilterV2 {
     pub fn update(&mut self, ax: f64, ay: f64, az: f64, wx: f64, wy: f64, wz: f64, dt: f64) {
         if !self.initialized {
             // First time - ignore prediction:
-            self.q = self.get_measurement(ax, ay, az);
+            self.q = self.get_measurement(ax, ay, az); // 四元数w分量在前
             self.a_filt = (ax, ay, az);
             self.a_prev = (ax, ay, az);
             self.initialized = true;
@@ -176,7 +176,7 @@ impl ComplementaryFilterV2 {
 
     // Update from accelerometer, gyroscope, and magnetometer data.
     // [ax, ay, az]: Normalized gravity vector.
-    // [wx, wy, wz]: Angular veloctiy, in rad / s.
+    // [wx, wy, wz]: Angular velocity, in rad / s.
     // [mx, my, mz]: Magnetic field, units irrelevant.
     // dt: time delta, in seconds.
     pub fn update_mag(&mut self, ax: f64, ay: f64, az: f64, wx: f64, wy: f64, wz: f64, mx: f64, my: f64, mz: f64, dt: f64) {
