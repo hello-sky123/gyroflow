@@ -83,7 +83,8 @@ impl GyroIntegrator for ComplementaryIntegrator {
                             magn[0], magn[1], magn[2],
                             (v.timestamp_ms - prev_time) / 1000.0);
                     }
-                } else */{
+                } else */
+                {
                     counter += 1;
                     if counter % 20 == 0 {
                         //println!("{:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}", v.timestamp_ms, acc[0], acc[1], acc[2], -g[1] * DEG2RAD, g[0] * DEG2RAD, g[2] * DEG2RAD);
