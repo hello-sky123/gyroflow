@@ -28,7 +28,7 @@ use crate::StabilizationParams;
 
 const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 
-pub type Quat64 = UnitQuaternion<f64>; // 双精度类型的四元数
+pub type Quat64 = UnitQuaternion<f64>; // 双精度类型的四元数，输出顺序为(x,y,z,w)
 
 // pub struct IMUData {
 //     pub timestamp_ms: f64,
@@ -554,6 +554,7 @@ impl GyroSource {
         let file_metadata = self.file_metadata.read();
         let mut smoothed_quaternions = self.quaternions.clone();
 
+        // 查询关键帧中是否设置额外的旋转角度
         for (ts, q) in smoothed_quaternions.iter_mut() {
             use crate::KeyframeType;
             let timestamp_ms = *ts as f64 / 1000.0;
@@ -566,7 +567,7 @@ impl GyroSource {
         }
 
         if true {
-            // Lock horizon, then smooth
+            // Lock horizon, then smooth，lock目前没有使用
             horizon_lock.lock(&mut smoothed_quaternions, &self.quaternions, &file_metadata.gravity_vectors, self.use_gravity_vectors, self.integration_method, compute_params);
             smoothed_quaternions = alg.smooth(&smoothed_quaternions, self.duration_ms, compute_params);
         } else {
