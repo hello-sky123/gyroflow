@@ -85,9 +85,11 @@ impl SmoothingAlgorithm for Plain {
             alpha = get_alpha(self.time_constant);
         }
 
+        // 裁剪暂时没有起作用
         let quats = Smoothing::get_trimmed_quats(quats, compute_params.scaled_duration_ms, self.trim_range_only, &compute_params.trim_ranges);
         let quats = quats.as_ref();
 
+        // 没有关键帧时，if部分不会执行
         let mut alpha_per_timestamp = BTreeMap::<i64, f64>::new();
         if keyframes.is_keyframed(&KeyframeType::SmoothingParamTimeConstant) || (compute_params.video_speed_affects_smoothing && (compute_params.video_speed != 1.0 || keyframes.is_keyframed(&KeyframeType::VideoSpeed))) {
             alpha_per_timestamp = quats.iter().map(|(ts, _)| {
@@ -104,17 +106,19 @@ impl SmoothingAlgorithm for Plain {
             }).collect();
         }
 
+        // scalers的键是陀螺仪数据的时间戳（微秒），值是缩放因子，map: 对迭代器中的每个元素x应用闭包逻辑
         let mut scalers: BTreeMap<i64, f64> = quats.iter().map(|x| {
             let mut scale = 1.0;
 
             let frame = crate::frame_at_timestamp(*x.0 as f64 / 1000.0, compute_params.scaled_fps) as usize;
+            // 没有fov_limit_ratio
             if let Some(fov_limit_ratio) = compute_params.smoothing_fov_limit_per_frame.get(frame) {
                 scale *= *fov_limit_ratio;
             }
             (*x.0, scale)
         }).collect();
 
-        // Smooth the scalers
+        // Smooth the scalers，全1时，平滑后还是全1
         let mut prev_scaler = *scalers.iter().next().unwrap().1;
         for (timestamp, scaler) in scalers.iter_mut().skip(1) {
             let alpha = *alpha_per_timestamp.get(timestamp).unwrap_or(&alpha);
