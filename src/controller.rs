@@ -777,7 +777,7 @@ impl Controller {
                     let additional_obj = additional_data.as_object_mut().unwrap();
                     if is_main_video {
                         // Ignore the error here, video file may not contain the telemetry and it's ok
-                        // 加载IMU数据
+                        // 加载视频自带的IMU数据
                         let _ = stab.load_gyro_data(&url, is_main_video, &Default::default(), progress, cancel_flag);
 
                         stab.recompute_undistortion();
@@ -786,7 +786,7 @@ impl Controller {
                         if sample_index > -1 {
                             options.sample_index = Some(sample_index as usize);
                         }
-
+                        // 加载独立的IMU数据
                         if let Err(e) = stab.load_gyro_data(&url, is_main_video, &options, progress, cancel_flag) {
                             err(("An error occured: %1".to_string(), e.to_string()));
                         }
