@@ -61,9 +61,11 @@ pub struct ComputeParams {
     pub digital_lens: Option<DistortionModel>,
     pub digital_lens_params: Option<Vec<f64>>
 }
+
 impl ComputeParams {
+    // “冻结”StabilizationManager的当前状态，并将所有需要的设置复制到一个独立的、干净的ComputeParams结构体中
     pub fn from_manager(mgr: &StabilizationManager) -> Self {
-        let params = mgr.params.read();
+        let params = mgr.params.read(); // 获取params的读锁
 
         let lens = mgr.lens.read().clone();
 
@@ -72,8 +74,9 @@ impl ComputeParams {
 
         let digital_lens_params = lens.digital_lens_params.clone();
 
+        // 创建ComputeParams实例
         Self {
-            gyro: mgr.gyro.clone(),
+            gyro: mgr.gyro.clone(), // clone只增加引用计数，处理线程将共享同一份数据的只读访问权
             lens,
             camera_diagonal_fovs: Vec::new(),
 
