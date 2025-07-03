@@ -505,7 +505,7 @@ impl StabilizationManager {
 
     pub fn recompute_smoothness(&self) {
         let mut params = stabilization::ComputeParams::from_manager(self);
-        params.calculate_camera_fovs();
+        params.calculate_camera_fovs(); // 计算的对角fov会在default_algo smooth中使用
 
         let smoothing = self.smoothing.read();
         let horizon_lock = smoothing.horizon_lock.clone();
