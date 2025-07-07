@@ -37,7 +37,7 @@ pub fn calculate_fovs(compute_params: &ComputeParams, timestamps: &[(usize, f64)
         return Default::default();
     }
 
-    let mut compute_params = compute_params.clone();
+    let mut compute_params = compute_params.clone(); // 深拷贝，可修改
     compute_params.fov_scale = 1.0;
     compute_params.fovs.clear();
     compute_params.minimal_fovs.clear();
@@ -58,7 +58,7 @@ pub fn calculate_fovs(compute_params: &ComputeParams, timestamps: &[(usize, f64)
         }
         (fov_values, fov_minimal)
     } else if compute_params.adaptive_zoom_window > 0.0001 {
-        // Dynamic zoom
+        // Dynamic zoom，动态zoom
         zoom_dynamic::compute(&compute_params, fov_values, timestamps, method)
     } else {
         // Disabled zoom
