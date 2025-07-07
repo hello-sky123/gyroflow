@@ -637,6 +637,7 @@ pub fn undistort_points_with_rolling_shutter(distorted: &[(f32, f32)], timestamp
 
     undistort_points(distorted, camera_matrix, &distortion_coeffs, rotations[0], Some(Matrix3::identity()), Some(rotations), params, lens_correction_amount, timestamp_ms, is, mesh)
 }
+
 pub fn undistort_points_for_optical_flow(distorted: &[(f32, f32)], timestamp_us: i64, params: &ComputeParams, points_dims: (u32, u32)) -> Vec<(f32, f32)> {
     let img_dim_ratio = points_dims.0 as f64 / params.width.max(1) as f64;//FrameTransform::get_ratio(params);
 
@@ -646,12 +647,13 @@ pub fn undistort_points_for_optical_flow(distorted: &[(f32, f32)], timestamp_us:
 
     undistort_points(distorted, scaled_k, &distortion_coeffs, Matrix3::identity(), None, None, params, 1.0, timestamp_us as f64 / 1000.0, None, None)
 }
+
 // Ported from OpenCV: https://github.com/opencv/opencv/blob/4.x/modules/calib3d/src/fisheye.cpp#L321
 pub fn undistort_points(distorted: &[(f32, f32)], camera_matrix: Matrix3<f64>, distortion_coeffs: &[f64; 12], rotation: Matrix3<f64>, p: Option<Matrix3<f64>>, rot_per_point: Option<Vec<Matrix3<f64>>>, params: &ComputeParams, lens_correction_amount: f64, timestamp_ms: f64, shift_per_point: Option<Vec<(f32, f32, f32, f32, f32)>>, mesh: Option<Vec<f64>>) -> Vec<(f32, f32)> {
-    let f = (camera_matrix[(0, 0)] as f32, camera_matrix[(1, 1)] as f32);
-    let c = (camera_matrix[(0, 2)] as f32, camera_matrix[(1, 2)] as f32);
+    let f = (camera_matrix[(0, 0)] as f32, camera_matrix[(1, 1)] as f32); // Focal lengths
+    let c = (camera_matrix[(0, 2)] as f32, camera_matrix[(1, 2)] as f32); // Principal point
 
-    let mut rr = rotation;
+    let mut rr = rotation; // 该帧对应的姿态
     if let Some(p) = p { // PP
         rr = p * rr;
     }
@@ -660,7 +662,7 @@ pub fn undistort_points(distorted: &[(f32, f32)], camera_matrix: Matrix3<f64>, d
 
     // TODO more params
     let kernel_params = KernelParams {
-        width : params.width as i32,
+        width : params.width as i32, // 类型转换后赋值
         height: params.height as i32,
         output_width: params.output_width as i32,
         output_height: params.output_height as i32,
