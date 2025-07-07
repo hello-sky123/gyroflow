@@ -31,17 +31,16 @@ impl OpenCVFisheye {
 
             // compensate distortion iteratively
             for _ in 0..10 {
-                let theta2 = theta*theta;
-                let theta4 = theta2*theta2;
-                let theta6 = theta4*theta2;
-                let theta8 = theta6*theta2;
+                let theta2 = theta * theta;
+                let theta4 = theta2 * theta2;
+                let theta6 = theta4 * theta2;
+                let theta8 = theta6 * theta2;
                 let k0_theta2 = params.k[0] * theta2;
                 let k1_theta4 = params.k[1] * theta4;
                 let k2_theta6 = params.k[2] * theta6;
                 let k3_theta8 = params.k[3] * theta8;
                 // new_theta = theta - theta_fix, theta_fix = f0(theta) / f0'(theta)
-                let mut theta_fix = (theta * (1.0 + k0_theta2 + k1_theta4 + k2_theta6 + k3_theta8) - theta_d)
-                                /
+                let mut theta_fix = (theta * (1.0 + k0_theta2 + k1_theta4 + k2_theta6 + k3_theta8) - theta_d) /
                                 (1.0 + 3.0 * k0_theta2 + 5.0 * k1_theta4 + 7.0 * k2_theta6 + 9.0 * k3_theta8);
 
                 theta_fix = theta_fix.max(-0.9).min(0.9);
@@ -77,12 +76,12 @@ impl OpenCVFisheye {
         let r = (x.powi(2) + y.powi(2)).sqrt();
 
         let theta = r.atan();
-        let theta2 = theta*theta;
-        let theta4 = theta2*theta2;
-        let theta6 = theta4*theta2;
-        let theta8 = theta4*theta4;
+        let theta2 = theta * theta;
+        let theta4 = theta2 * theta2;
+        let theta6 = theta4 * theta2;
+        let theta8 = theta4 * theta4;
 
-        let theta_d = theta * (1.0 + params.k[0]*theta2 + params.k[1]*theta4 + params.k[2]*theta6 + params.k[3]*theta8);
+        let theta_d = theta * (1.0 + params.k[0] * theta2 + params.k[1] * theta4 + params.k[2] * theta6 + params.k[3] * theta8);
 
         let scale = if r == 0.0 { 1.0 } else { theta_d / r };
 
