@@ -51,6 +51,7 @@ impl FieldOfViewAlgorithm for FovIterative<'_> {
                 .collect()
         } else {
             let kv = (self.compute_params.adaptive_zoom_center_offset.0, self.compute_params.adaptive_zoom_center_offset.1, self.compute_params.lens_correction_amount);
+            // 转换为迭代器
             timestamps.into_par_iter()
                 .map(|&(frame, ts)| self.find_fov(&rect, ts, frame, &cp, &kv))
                 .collect()
@@ -136,7 +137,7 @@ impl<'a>  FovIterative<'a> {
     fn nearest_edge(&self, polygon: &[(f32, f32)], center: &Point2D, initial: (f32, f32)) -> (Option<usize>, (f32, f32)) {
         polygon
             .iter()
-            .enumerate()
+            .enumerate() // 同时获得索引和元素
             .fold((None, initial), |mp, (i, (x,y))| {
                 let ap = ((x - center.0).abs(), (y - center.1).abs());
                 if ap.0 < mp.1.0 && ap.1 < mp.1.1 {
@@ -150,7 +151,7 @@ impl<'a>  FovIterative<'a> {
             })
     }
 
-    // Returns points placed around a rectangle in a continous order
+    // Returns points placed around a rectangle in a continuous order
     pub fn points_around_rect(&self, mut w: f32, mut h: f32, w_div: usize, h_div: usize) -> Vec<(f32, f32)> {
         w -= self.compute_params.fov_algorithm_margin * 2.0;
         h -= self.compute_params.fov_algorithm_margin * 2.0;
@@ -182,7 +183,7 @@ fn interpolate_points(pts: &[(f32, f32)], steps: usize) -> Vec<(f32,f32)> {
     let new_len = d * pts.len() - steps;
     (0..new_len).map(|i| {
         let idx1 = i / d;
-        let idx2 = (idx1+1).min(pts.len()-1);
+        let idx2 = (idx1 + 1).min(pts.len() - 1);
         let f = ((i % d) as f32) / (d as f32);
         (pts[idx1].0 + f * (pts[idx2].0 - pts[idx1].0), pts[idx1].1 + f * (pts[idx2].1 - pts[idx1].1))
     }).collect()
