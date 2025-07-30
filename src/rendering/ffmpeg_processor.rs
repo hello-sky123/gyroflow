@@ -526,7 +526,7 @@ impl<'a> FfmpegProcessor<'a> {
             start_ms = Some(first_range.0);
             end_ms = Some(first_range.1);
             let position = (first_range.0 as i64).rescale((1, 1000), rescale::TIME_BASE);
-            self.input_context.seek(position, ..position)?;
+            self.input_context.seek(position, ..position)?; // 跳转到指定时间点
             ranges.remove(0);
         }
 
