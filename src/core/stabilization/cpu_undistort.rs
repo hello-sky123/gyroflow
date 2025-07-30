@@ -8,7 +8,7 @@ use nalgebra::{ Vector2, Vector3, Vector4, Matrix3 };
 use rayon::{ prelude::ParallelSliceMut, iter::{ ParallelIterator, IndexedParallelIterator } };
 use crate::util::map_coord;
 
-pub const COEFFS: [f32; 64+128+256 + 9*4 + 4] = [
+pub const COEFFS: [f32; 64 + 128 + 256 + 9 * 4 + 4] = [
     // Bilinear
     // offset 0
     1.000000, 0.000000, 0.968750, 0.031250, 0.937500, 0.062500, 0.906250, 0.093750, 0.875000, 0.125000, 0.843750, 0.156250,
@@ -419,6 +419,7 @@ impl Stabilization {
         }
 
         fn undistort_coord(mut out_pos: Vector2<f32>, params: &KernelParams, matrices: &[[f32; 14]], distortion_model: &DistortionModel, digital_lens: Option<&DistortionModel>, r_limit_sq: f32, mesh_data: &[f64], out_c: &Vector2<f32>, out_f: &Vector2<f32>) -> Option<Vector2<f32>> {
+            // map_coord只在输入尺寸和输出尺寸不一致时起作用
             out_pos.x = map_coord(out_pos.x, params.output_rect[0] as f32, (params.output_rect[0] + params.output_rect[2]) as f32, 0.0, params.output_width  as f32);
             out_pos.y = map_coord(out_pos.y, params.output_rect[1] as f32, (params.output_rect[1] + params.output_rect[3]) as f32, 0.0, params.output_height as f32);
             out_pos.x += params.translation2d[0];
