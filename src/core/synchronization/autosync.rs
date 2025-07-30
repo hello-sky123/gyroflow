@@ -42,6 +42,8 @@ impl AutosyncProcess {
         let fps_scale = params.fps_scale;
         let duration_ms = params.get_scaled_duration_ms();
 
+        // 从一个名为sync_params的SyncParams结构体中，方便地提取出我们感兴趣的几个字段，
+        // 并将它们绑定到新的局部变量上，同时忽略我们不关心的其他字段
         let SyncParams {
             search_size,
             mut time_per_syncpoint,
@@ -49,12 +51,13 @@ impl AutosyncProcess {
             ..
         } = sync_params;
 
+        // 如果fps_scale存在，则将time_per_syncpoint乘以fps_scale
         if let Some(scale) = &fps_scale {
             time_per_syncpoint *= scale;
         }
         let frame_count = ((timestamps_fract.len() as f64 * (time_per_syncpoint / 1000.0) * org_fps).ceil() as usize).min(params.frame_count) / every_nth_frame as usize;
 
-        drop(params);
+        drop(params); // 立即销毁变量，释放该变量所管理的资源
 
         if duration_ms < 10.0 || frame_count < 2 || time_per_syncpoint < 10.0 || search_size < 10.0 { return Err(()); }
 
@@ -127,6 +130,7 @@ impl AutosyncProcess {
     }
 
     pub fn feed_frame(&self, mut timestamp_us: i64, frame_no: usize, mut width: u32, height: u32, stride: usize, pixels: &[u8]) {
+        // 将YUV图像转换为灰度图像
         let img = PoseEstimator::yuv_to_gray(width, height, stride as u32, pixels).map(Arc::new);
         if width > stride as u32 {
             width = stride as u32;
