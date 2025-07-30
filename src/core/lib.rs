@@ -51,7 +51,8 @@ use calibration::LensCalibrator;
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 lazy_static::lazy_static! {
-    static ref THREAD_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new().build().unwrap();
+    // static ref THREAD_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new().build().unwrap();
+    static ref THREAD_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap();
 }
 
 #[derive(Default, Clone, Debug, serde::Serialize, serde::Deserialize)]
