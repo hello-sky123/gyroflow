@@ -392,10 +392,10 @@ impl Controller {
         }
         let mut sync_params = sync_params.unwrap();
 
-        sync_params.initial_offset     *= 1000.0; // s to ms
+        sync_params.initial_offset *= 1000.0; // s to ms
         sync_params.time_per_syncpoint *= 1000.0; // s to ms
-        sync_params.search_size        *= 1000.0; // s to ms
-        sync_params.every_nth_frame     = sync_params.every_nth_frame.max(1);
+        sync_params.search_size *= 1000.0; // s to ms
+        sync_params.every_nth_frame = sync_params.every_nth_frame.max(1);
 
         let for_rs = mode == "estimate_rolling_shutter";
 
@@ -404,6 +404,7 @@ impl Controller {
         self.sync_in_progress = true;
         self.sync_in_progress_changed();
 
+        // 同步点的分数，3个点对应于1/6, 3/6, 5/6，四个点对应于1/8, 3/8, 5/8, 7/8
         let timestamps_fract: Vec<f64> = timestamps_fract.split(';').filter_map(|x| x.parse::<f64>().ok()).collect();
 
         let progress = util::qt_queued_callback_mut(self, |this, (percent, ready, total): (f64, usize, usize)| {
@@ -464,6 +465,7 @@ impl Controller {
         self.cancel_flag.store(false, SeqCst);
 
         if let Ok(mut sync) = AutosyncProcess::from_manager(&self.stabilizer, &timestamps_fract, sync_params, mode, self.cancel_flag.clone()) {
+            // 使用传入的参数构造一个AutosyncProcess对象，并将上面定义的回调函数注册到sync对象上
             sync.on_progress(move |percent, ready, total| {
                 progress((percent, ready, total));
             });
@@ -498,13 +500,16 @@ impl Controller {
                 }
                 ::log::debug!("Decoder options: {:?}", decoder_options);
 
-                let sync = std::rc::Rc::new(sync);
+                let sync = std::rc::Rc::new(sync); // 单线程的Reference Counted (引用计数) 智能指针，转移所有权
 
                 let fs_base = gyroflow_core::filesystem::get_engine_base();
+                // 根据视频文件的类型选择解码器后端，.braw和.r3d选择Mdk，其他格式使用FFmpeg解码器
                 match VideoProcessor::from_file(&fs_base, &input_file.url, gpu_decoding, 0, Some(decoder_options)) {
                     Ok(mut proc) => {
+                        // 为解码器设置一个“每帧回调”，每当解码器成功解码一帧时，就会调用这个闭包
                         let err2 = err.clone();
                         let sync2 = sync.clone();
+                        // 调用on_frame方法来注册预处理图像的闭包（回调函数），|...| 代表一个闭包，move关键字表示这个闭包将获取其引用的所有外部变量的所有权
                         proc.on_frame(move |timestamp_us, input_frame, _output_frame, converter, _rate_control| {
                             assert!(_output_frame.is_none());
 
@@ -513,8 +518,10 @@ impl Controller {
                                 let ratio = input_frame.height() as f64 / h as f64;
                                 let sw = (input_frame.width() as f64 / ratio).round() as u32;
                                 let sh = (input_frame.height() as f64 / (input_frame.width() as f64 / sw as f64)).round() as u32;
+                                // 将输入帧缩放到指定的宽度和高度的灰度图，是Video的GRAY8格式
                                 match converter.scale(input_frame, ffmpeg_next::format::Pixel::GRAY8, sw, sh) {
                                     Ok(small_frame) => {
+                                        // 如果缩放和灰度化成功，则获取缩放后的图像的宽度、高度、步幅和像素数据
                                         let (width, height, stride, pixels) = (small_frame.plane_width(0), small_frame.plane_height(0), small_frame.stride(0), small_frame.data(0));
 
                                         sync2.feed_frame(timestamp_us, frame_no, width, height, stride, pixels);
@@ -528,6 +535,7 @@ impl Controller {
                             abs_frame_no += 1;
                             Ok(())
                         });
+                        // 根据传入的时间戳范围，开始解码视频文件
                         if let Err(e) = proc.start_decoder_only(ranges, cancel_flag.clone()) {
                             err(("An error occured: %1".to_string(), e.to_string()));
                         }
