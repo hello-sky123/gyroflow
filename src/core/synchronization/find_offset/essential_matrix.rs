@@ -11,25 +11,29 @@ use super::super::{ PoseEstimator, SyncParams };
 use crate::gyro_source::TimeIMU;
 
 pub fn find_offsets<F: Fn(f64) + Sync>(estimator: &PoseEstimator, ranges: &[(i64, i64)], sync_params: &SyncParams, params: &ComputeParams, progress_cb: F, cancel_flag: Arc<AtomicBool>) -> Vec<(f64, f64, f64)> { // Vec<(timestamp, offset, cost)>
-    let estimated_gyro = estimator.estimated_gyro.read().clone();
+    let estimated_gyro = estimator.estimated_gyro.read().clone(); // 光流估计的陀螺仪数据
 
     let mut offsets = Vec::new();
-    let gyro = params.gyro.read();
-    let ranges_len = ranges.len() as f64;
+    let gyro = params.gyro.read(); // 视频附带的陀螺仪数据
+    let ranges_len = ranges.len() as f64; // 同步点的个数
 
     let raw_imu_len = gyro.raw_imu(&gyro.file_metadata.read()).len();
 
     if !estimated_gyro.is_empty() && gyro.duration_ms > 0.0 && raw_imu_len > 0 {
+        // 遍历每一个同步点范围
         for (i, (from_ts, to_ts)) in ranges.iter().enumerate() {
             if cancel_flag.load(Relaxed) { break; }
             progress_cb(i as f64 / ranges_len);
             if to_ts <= from_ts { continue; }
 
+            // 获取光流估计的陀螺仪数据在当前同步点范围内的项
             let mut of_item: Vec<TimeIMU> = estimated_gyro.range(from_ts..to_ts).map(|v| v.1.clone()).collect();
             if !of_item.is_empty() {
+                // 获取范围内光流估计的陀螺仪数据的最后一个的时间戳
                 let last_of_timestamp = of_item.last().map(|x| x.timestamp_ms).unwrap_or_default();
                 let mut gyro_item: Vec<TimeIMU> = gyro.raw_imu(&gyro.file_metadata.read()).iter().filter_map(|x| {
                     let ts = x.timestamp_ms + sync_params.initial_offset;
+                    // 只保留时间戳在当前同步点范围内的陀螺仪数据
                     if ts >= of_item[0].timestamp_ms - sync_params.search_size && ts <= last_of_timestamp + sync_params.search_size {
                         Some(x.clone())
                     } else {
@@ -49,18 +53,19 @@ pub fn find_offsets<F: Fn(f64) + Sync>(estimator: &PoseEstimator, ranges: &[(i64
 
                 let gyro_bintree: BTreeMap<usize, TimeIMU> = gyro_item.into_iter().map(|x| ((x.timestamp_ms * 1000.0) as usize, x)).collect();
 
+                // 这个闭包的功能是比较两个元组，并返回“较小”的那个
                 let find_min = |a: (f64, f64), b: (f64, f64)| -> (f64, f64) { if a.1 < b.1 { a } else { b } };
 
                 // First search every 1 ms
                 let steps = sync_params.search_size as usize * 2;
                 let lowest = (0..steps)
-                    .into_par_iter()
-                    .map(|i| {
-                        let offs = sync_params.initial_offset - sync_params.search_size + (i as f64);
-                        (offs, calculate_cost(offs, &of_item, &gyro_bintree))
+                    .into_par_iter() // 将范围迭代器转换为并行迭代器
+                    .map(|i| { // 对每一步执行闭包操作
+                        let offs = sync_params.initial_offset - sync_params.search_size + (i as f64); // 以1ms为步长的线性扫描
+                        (offs, calculate_cost(offs, &of_item, &gyro_bintree)) // 计算在该偏移量下，光流数据和陀螺仪数据的匹配程度
                     })
-                    .reduce_with(find_min)
-                    .and_then(|lowest| {
+                    .reduce_with(find_min) // 在所有并行的结果中，找到成本最低的那一个（先在每个线程内部寻找，然后在所有线程局部最小值之间找到最小的）
+                    .and_then(|lowest| { // 第一阶段找到的最小值
                         // Then refine to 0.01 ms accuracy
                         let search_size = 2.0; // ms
                         let steps = (search_size * 100.0) as usize; // 100 times per ms
@@ -72,7 +77,7 @@ pub fn find_offsets<F: Fn(f64) + Sync>(estimator: &PoseEstimator, ranges: &[(i64
                                 (offs, calculate_cost(offs, &of_item, &gyro_bintree))
                             })
                             .reduce_with(find_min)
-                    });
+                    }); // 整个and_then的返回值，即第二阶段reduce_with的返回值，最终赋值给let lowest
 
                 if let Some(lowest) = lowest {
                     let middle_timestamp = (*from_ts as f64 + (to_ts - from_ts) as f64 / 2.0) / 1000.0;
