@@ -27,17 +27,20 @@ impl OFOpenCVPyrLK {
 
         #[cfg(feature = "use-opencv")]
         let features = {
+            // 零拷贝数据转换，as_raw()返回一个指向图像数据缓冲区的切片&[u8]，as_ptr()获取切片的裸指针，new_size_with_data_unsafe是opencv-rust绑定库提供的一个函数
+            // 它创建了一个cv::Mat头，但其数据部分不分配新内存，而是指向我们提供的裸指针
             let inp = unsafe { Mat::new_size_with_data_unsafe(Size::new(w, h), CV_8UC1, img.as_raw().as_ptr() as *mut std::ffi::c_void, img.width() as usize) };
 
             // opencv::imgcodecs::imwrite("D:/test.jpg", &inp, &opencv::types::VectorOfi32::new());
 
-            let mut pts = Mat::default();
+            let mut pts = Mat::default(); // 创建一个空的Mat对象，用于存储检测到的特征点
 
             if let Err(e) = inp.and_then(|inp| {
                 opencv::imgproc::good_features_to_track(&inp, &mut pts, 200, 0.01, 10.0, &Mat::default(), 3, false, 0.04)
             }) {
                 log::error!("OpenCV error {:?}", e);
             }
+            // 将Mat中的特征点是一个Nx1点Mat，每一行是一个cv::Point2f，将其转换为Vec<(f32, f32)>，每个特征点的x和y坐标
             (0..pts.rows()).into_iter().filter_map(|i| { let x = pts.at::<Point2f>(i).ok()?; Some((x.x, x.y))}).collect()
         };
         #[cfg(not(feature = "use-opencv"))]
@@ -62,15 +65,19 @@ impl OpticalFlowTrait for OFOpenCVPyrLK {
 
     fn optical_flow_to(&self, _to: &OpticalFlowMethod) -> OpticalFlowPair {
         #[cfg(feature = "use-opencv")]
+        // 检查_to枚举是否是OFOpenCVPyrLK类型
         if let OpticalFlowMethod::OFOpenCVPyrLK(next) = _to {
             let (w, h) = self.size;
             if self.img.is_empty() || next.img.is_empty() || w <= 0 || h <= 0 { return None; }
 
+            // 缓存检查（多线程环境），判断是否已经为该帧计算过光流了
             if let Some(matched) = self.matched_points.read().get(&next.timestamp_us) {
                 return Some(matched.clone());
             }
 
+            // || -> Result<...> {...}()定义一个闭包并立即调用它，这种模式常用于将一大段可能返回Result的代码隔离开，以便使用？操作符进行错误传播
             let result = || -> Result<(Vec<(f32, f32)>, Vec<(f32, f32)>), opencv::Error> {
+                // 高效的将Rust的图像内存借给OpenCV，创建一个Mat对象头，而无需复制整个图像
                 let a1_img = unsafe { Mat::new_size_with_data_unsafe(Size::new(w, h), CV_8UC1, self.img.as_raw().as_ptr() as *mut std::ffi::c_void, w as usize) }?;
                 let a2_img = unsafe { Mat::new_size_with_data_unsafe(Size::new(w, h), CV_8UC1, next.img.as_raw().as_ptr() as *mut std::ffi::c_void, w as usize) }?;
 
@@ -79,6 +86,7 @@ impl OpticalFlowTrait for OFOpenCVPyrLK {
                 let a1_pts = Mat::from_slice(&pts1)?;
                 //let a2_pts = a2.features;
 
+                // 创建空的Mat，用于接收光流函数的输出
                 let mut a2_pts = Mat::default();
                 let mut status = Mat::default();
                 let mut err = Mat::default();
@@ -87,6 +95,7 @@ impl OpticalFlowTrait for OFOpenCVPyrLK {
 
                 let mut pts1 = Vec::with_capacity(status.rows() as usize);
                 let mut pts2 = Vec::with_capacity(status.rows() as usize);
+                // 遍历状态矩阵，提取有效的光流点（1u8是无符号8位整数常量1）
                 for i in 0..status.rows() {
                     if *status.at::<u8>(i)? == 1u8 {
                         let pt1 = a1_pts.at::<Point2f>(i)?;
@@ -116,6 +125,7 @@ impl OpticalFlowTrait for OFOpenCVPyrLK {
         }
         None
     }
+
     fn can_cleanup(&self) -> bool {
         self.used.load(std::sync::atomic::Ordering::SeqCst) == 2
     }
