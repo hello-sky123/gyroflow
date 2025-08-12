@@ -525,8 +525,12 @@ impl<'a> FfmpegProcessor<'a> {
         if let Some(first_range) = ranges.first() {
             start_ms = Some(first_range.0);
             end_ms = Some(first_range.1);
+            // 将起始时间（ms）转成FFmpeg所使用的时间戳（以rescale::TIME_BASE为单位，通常是AV_TIME_BASE = 1_000_000，即微秒）
             let position = (first_range.0 as i64).rescale((1, 1000), rescale::TIME_BASE);
-            self.input_context.seek(position, ..position)?; // 跳转到指定时间点
+            // 现代视频不是由一系列独立的图片组成，为了压缩视频文件的大小，视频编码器使用了帧间预测技术，视频帧被分为了三类：
+            // 1. I帧（Intra-frame是一个完整的、自包含的帧，可以独立解码） 2. P帧（Predictive-frame） 3. B帧（Bi-directional predictive frame）
+            // P帧和B帧无法独立解码，seek函数会跳转到一个可以开始解码的位置，通常是I帧，但这个位置会比请求的时间点早一些
+            self.input_context.seek(position, ..position)?;
             ranges.remove(0);
         }
 
