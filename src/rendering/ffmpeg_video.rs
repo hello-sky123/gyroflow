@@ -192,9 +192,11 @@ impl<'a> VideoTranscoder<'a> {
         let mut frame = frame::Video::empty();
         let mut sw_frame = &mut self.buffers.sw_frame;
 
+        // 使用收到的的packet开始解码
         while decoder.receive_frame(&mut frame).is_ok() {
             let time_base = self.encoder_params.time_base.unwrap();
 
+            // 获取解码后的视频帧的时间戳
             if let Some(mut ts) = frame.timestamp() {
                 let timestamp_us = ts;
                 let timestamp_ms = timestamp_us as f64 / 1000.0;
@@ -212,6 +214,7 @@ impl<'a> VideoTranscoder<'a> {
                     };
 
                     let mut hw_formats = None;
+                    // 根据使用CPU解码还是GPU解码给输入帧以不同的输入
                     let input_frame =
                         if unsafe { !(*frame.as_mut_ptr()).hw_frames_ctx.is_null() } {
                             hw_formats = Some(unsafe { super::ffmpeg_hw::get_transfer_formats_from_gpu(frame.as_mut_ptr()) });
@@ -224,6 +227,7 @@ impl<'a> VideoTranscoder<'a> {
                             &mut frame
                         };
 
+                    // 判断是否需要转换像素格式
                     if input_frame.format() == format::Pixel::YUVJ420P {
                         input_frame.set_format(format::Pixel::YUV420P);
                         input_frame.set_color_range(util::color::Range::JPEG);
@@ -254,7 +258,7 @@ impl<'a> VideoTranscoder<'a> {
                         }
                     }
 
-                    // Process frame
+                    // Process frame（调用传入的闭包回调函数）
                     if self.decode_only || self.processing_order == ProcessingOrder::PreConversion {
                         if let Some(ref mut cb) = self.on_frame_callback {
                             cb(timestamp_us, input_frame, self.buffers.output_frame_pre.as_mut(), &mut self.converter, &mut rate_control)?;
