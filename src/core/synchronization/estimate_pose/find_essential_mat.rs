@@ -28,7 +28,7 @@ impl EstimatePoseTrait for PoseFindEssentialMat {
             let pts1 = pts11.into_iter().map(|(x, y)| Point2f::new(x, y)).collect::<Vec<Point2f>>();
             let pts2 = pts22.into_iter().map(|(x, y)| Point2f::new(x, y)).collect::<Vec<Point2f>>();
 
-            let a1_pts = Mat::from_slice(&pts1)?;
+            let a1_pts = Mat::from_slice(&pts1)?; // 将Rust的切片（Vec<Point2f>）转换为cv::Mat类型
             let a2_pts = Mat::from_slice(&pts2)?;
 
             let identity = Mat::eye(3, 3, opencv::core::CV_64F)?;
