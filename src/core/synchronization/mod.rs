@@ -80,11 +80,14 @@ impl PoseEstimator {
         self.estimated_quats.write().clear();
     }
 
-    pub fn detect_features(&self, frame_no: usize, timestamp_us: i64, img: Arc<image::GrayImage>, width: u32, height: u32, of_method: u32) {
+    pub fn detect_features(&self, frame_no: usize, timestamp_us: i64, img: Arc<GrayImage>, width: u32, height: u32, of_method: u32) {
         let frame_size = (width, height);
+        // 多线程环境下，先检查是否已经存在这个时间戳的结果
         let contains = self.sync_results.read().contains_key(&timestamp_us);
         if !contains {
+            // 实例化一个新的FrameResult
             let result = FrameResult {
+                // of_method保存了光流检测的结果
                 of_method: OpticalFlowMethod::detect_features(of_method, timestamp_us, img, width, height),
                 frame_no,
                 frame_size,
@@ -111,10 +114,15 @@ impl PoseEstimator {
         let every_nth_frame = self.every_nth_frame.load(SeqCst) as f64;
         let mut frames_to_process = Vec::new();
         {
+            // 获取光流跟踪结果
             let l = self.sync_results.read();
+            // 遍历所有同步结果，k为时间戳，v为FrameResult
             for (k, v) in l.iter() {
+                // 检查当前同步结果的旋转矩阵是否为空，且视频尺寸是否为空
                 if v.rotation.is_none() && v.frame_size.0 > 0 {
+                    // range方法获取子范围内的迭代器，判断是否在同一个同步点区域内（且索引号连续）
                     if let Some((next_k, _)) = l.range(k..).find(|(_, next)| v.frame_no + 1 == next.frame_no && next.frame_size.0 > 0) {
+                        // 存入待处理图像帧数组
                         frames_to_process.push((*k, *next_k));
                     }
                 }
@@ -122,14 +130,19 @@ impl PoseEstimator {
         }
 
         let results = self.sync_results.clone();
+        // 获取位姿估计的具体方法
         let mut pose = EstimatePoseMethod::from(self.pose_method.load(SeqCst));
         pose.init(params);
+        // 当前帧和下一帧的时间戳对，move关键字表示闭包会获取其捕获的变量
         frames_to_process.par_iter().for_each(move |(ts, next_ts)| {
             {
+                // 获取所有同步点区域待分析帧的结果信息
                 let l = results.read();
+                // 当前帧的光流结果
                 if let Some(curr) = l.get(ts) {
                     if curr.rotation.is_none() {
                         //let curr = curr.item.clone();
+                        // 获取下一帧的光流结果
                         if let Some(next) = l.get(next_ts) {
                             // TODO estimate pose should be quick so test if instead of cloning it is faster just to keep the lock for longer
                             let curr_of = curr.of_method.clone();
@@ -138,13 +151,14 @@ impl PoseEstimator {
                             // Unlock the mutex for estimate_pose
                             drop(l);
 
+                            // 根据前后帧的光流匹配特征对估计帧间旋转矩阵，第一个参数是光流匹配特征点对
                             if let Some(rot) = pose.estimate_pose(&curr_of.optical_flow_to(&next_of), curr_of.size(), params, *ts, *next_ts) {
                                 let mut l = results.write();
                                 if let Some(x) = l.get_mut(ts) {
-                                    x.rotation = Some(rot);
+                                    x.rotation = Some(rot); // 旋转矩阵
                                     x.quat = Some(Quat64::from(rot));
                                     let rotvec = rot.scaled_axis() * (scaled_fps / every_nth_frame);
-                                    x.euler = Some((rotvec[0], rotvec[1], rotvec[2]));
+                                    x.euler = Some((rotvec[0], rotvec[1], rotvec[2])); // 在极短时间内，旋转向量就是欧拉角
                                 } else {
                                     log::warn!("Failed to get ts {}", ts);
                                 }
@@ -194,7 +208,7 @@ impl PoseEstimator {
 
     pub fn cache_optical_flow(&self, num_frames: usize) {
         let l = self.sync_results.read();
-        let keys: Vec<i64> = l.keys().copied().collect();
+        let keys: Vec<i64> = l.keys().copied().collect(); // 获取所有的时间戳
         for (i, k) in keys.iter().enumerate() {
             if let Some(from_fr) = l.get(k) {
                 if from_fr.optical_flow.try_borrow().map(|of| !of.is_empty()).unwrap_or_default() {
@@ -218,6 +232,7 @@ impl PoseEstimator {
             }
         }
     }
+
     pub fn cleanup(&self) {
         let mut l = self.sync_results.write();
         for (_, i) in l.iter_mut(){
@@ -259,7 +274,7 @@ impl PoseEstimator {
     }
     pub fn yuv_to_gray(_width: u32, height: u32, stride: u32, slice: &[u8]) -> Option<GrayImage> {
         // TODO: maybe a better way than using stride as width?
-        image::GrayImage::from_raw(stride as u32, height, slice[0..(stride*height) as usize].to_vec())
+        image::GrayImage::from_raw(stride as u32, height, slice[0..(stride * height) as usize].to_vec())
     }
     pub fn lowpass_filter(&self, freq: f64, fps: f64) {
         self.lpf.store((freq * 100.0) as u32, SeqCst);
@@ -269,6 +284,7 @@ impl PoseEstimator {
     pub fn recalculate_gyro_data(&self, fps: f64, final_pass: bool) {
         let lpf = self.lpf.load(SeqCst) as f64 / 100.0;
 
+        // Rust拥有强大的类型推断系统。这意味着编译器会根据你后续如何使用gyro这个变量，来自动推断出K和V的具体类型
         let mut gyro = BTreeMap::new();
         let mut quats = TimeQuat::new();
         let mut update_eulers = BTreeMap::<i64, Option<(f64, f64, f64)>>::new();
@@ -276,16 +292,19 @@ impl PoseEstimator {
         {
             let sync_results = self.sync_results.read();
 
-            let mut iter = sync_results.iter().peekable();
+            let mut iter = sync_results.iter().peekable(); // 查看下一个元素，而不移动迭代器
             while let Some((k, v)) = iter.next() {
                 let mut eul = v.euler;
 
                 // ----------- Interpolation -----------
                 if final_pass && eul.is_none() {
+                    // 比时间戳k小的同步结果的逆序中，找到其中第一个存在帧间欧拉角的数据
                     if let Some(prev_existing) = sync_results.range(..*k).rev().find(|x| x.1.euler.is_some()) {
+                        // 比时间戳k大的同步结果中，找到其中第一个存在帧间欧拉角的数据
                         if let Some(next_existing) = sync_results.range(*k..).find(|x| x.1.euler.is_some()) {
+                            // 根据时间戳计算插值的比例系数
                             let ratio = (*k - prev_existing.0) as f64 / (next_existing.0 - prev_existing.0) as f64;
-
+                            // 定义插值函数
                             fn interpolate(prev: f64, next: f64, ratio: f64) -> f64 {
                                 prev + (next - prev) * ratio
                             }
@@ -304,18 +323,19 @@ impl PoseEstimator {
                     }
                 }
                 // ----------- Interpolation -----------
-
+                // 获取当前时刻的欧拉角数据
                 if let Some(e) = eul {
                     // Analyzed motion in reality happened during the transition from this frame to the next frame
                     // So we can't use the detected motion to distort `this` frame, we need to set the timestamp in between the frames
                     // TODO: figure out if rolling shutter time can be used to make better calculation here
-                    let mut ts = *k as f64 / 1000.0;
+                    let mut ts = *k as f64 / 1000.0; // 转换为ms
                     if let Some(next_ts) = iter.peek().map(|(&k, _)| k as f64 / 1000.0) {
-                        ts += (next_ts - ts) / 2.0;
+                        ts += (next_ts - ts) / 2.0; // 当前时刻加上下一个数据和当前数据的时间间隔的一半
                     }
 
-                    let ts_us = (ts * 1000.0).round() as i64;
+                    let ts_us = (ts * 1000.0).round() as i64; // 转换为微秒
                     update_timestamps.insert(*k, ts_us);
+                    // 光流估计的角速度数据
                     gyro.insert(ts_us, TimeIMU {
                         timestamp_ms: ts,
                         gyro: Some([
