@@ -130,7 +130,7 @@ impl AutosyncProcess {
     }
 
     pub fn feed_frame(&self, mut timestamp_us: i64, frame_no: usize, mut width: u32, height: u32, stride: usize, pixels: &[u8]) {
-        // 将YUV图像转换为灰度图像
+        // 将YUV图像转换为灰度图像，image::GrayImage以[x, y]和get_pixel(x, y)访问像素值的方式和OpenCV的at<>相反
         let img = PoseEstimator::yuv_to_gray(width, height, stride as u32, pixels).map(Arc::new);
         if width > stride as u32 {
             width = stride as u32;
@@ -156,6 +156,11 @@ impl AutosyncProcess {
             timestamp_us += (compute_params.gyro.read().file_metadata.read().per_frame_time_offsets.get(frame).unwrap_or(&0.0) * 1000.0).round() as i64;
         }
 
+        // iter是Rust所有集合（collection）都有的标准方法，它会创建一个迭代器，这个迭代器提供对集合元素的逐一地不可变引用访问
+        // find是迭代器的一个核心方法，接收一个闭包或者函数作为参数，它会遍历迭代器中的每个元素，并将元素传递给这个闭包，闭包的返回值是一个布尔类型
+        // 如果闭包返回true，find方法就会返回当前元素的引用；如果没有元素满足条件，则返回None，find括号内整个是一个闭包，||是闭包的参数列表
+        // (*from..=*to): 这是Rust的范围语法，并且是闭区间版本，contains检查timestamp_us（闭包捕获的外部变量）是否在范围内
+        // 整体作用是判断当前图像帧的时间戳是否在已知的同步范围内，如果在，则继续处理该帧
         if let Some(_current_range) = self.scaled_ranges_us.iter().find(|(from, to)| (*from..=*to).contains(&timestamp_us)) {
             self.total_read_frames.fetch_add(1, SeqCst);
 
@@ -165,9 +170,11 @@ impl AutosyncProcess {
                     return;
                 }
                 if let Some(img) = img {
+                    // 在当前帧的灰度图像上根据指定的光流方法检测特征点，构造FrameResult对象映射
                     estimator.detect_features(frame_no, timestamp_us, img, width, height, method);
                     total_detected_frames.fetch_add(1, SeqCst);
 
+                    // 每隔7帧对检测到光流特征的视频帧进行帧间位姿估计，计算旋转矩阵，并转换为四元数和欧拉角存储
                     if frame_no % 7 == 0 {
                         estimator.process_detected_frames(org_fps, scaled_fps, &compute_params.read());
                         estimator.recalculate_gyro_data(org_fps, false);
@@ -190,7 +197,7 @@ impl AutosyncProcess {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
-        let offset_method = self.sync_params.offset_method;
+        let offset_method = self.sync_params.offset_method; // 估算偏移方法
 
         let progress_cb = self.progress_cb.clone();
 
@@ -251,6 +258,7 @@ impl AutosyncProcess {
                     cb(Either::Right(guessed));
                 }
             } else {
+                // 估计时间偏移
                 let offsets = self.estimator.find_offsets(&scaled_ranges_us, &self.sync_params, &self.compute_params.read(), progress_cb2, self.cancel_flag.clone());
                 if check_negative {
                     for_negative.store(true, SeqCst);
