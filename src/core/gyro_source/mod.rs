@@ -286,15 +286,15 @@ impl GyroSource {
                             else if let Some(v) = map.get(&TagId::ISOValue) { settings.insert(String::from("ISO"), v.value.to_string().into()); }
                         }
                         if let Some(map) = tag_map.get(&GroupId::Colors) {
-                            if let Some(v) = map.get(&TagId::ColorPrimaries)       { settings.insert(String::from("Color primaries"),      v.value.to_string().into()); }
-                            if let Some(v) = map.get(&TagId::CaptureGammaEquation) { settings.insert(String::from("Gamma equation"),       v.value.to_string().into()); }
-                            if let Some(v) = map.get(&TagId::AutoWBMode)           { settings.insert(String::from("White balance mode"), v.value.to_string().into()); }
-                            if let Some(v) = map.get(&TagId::WhiteBalance)         { settings.insert(String::from("White balance"),      v.value.to_string().into()); }
+                            if let Some(v) = map.get(&TagId::ColorPrimaries) { settings.insert(String::from("Color primaries"), v.value.to_string().into()); }
+                            if let Some(v) = map.get(&TagId::CaptureGammaEquation) { settings.insert(String::from("Gamma equation"), v.value.to_string().into()); }
+                            if let Some(v) = map.get(&TagId::AutoWBMode) { settings.insert(String::from("White balance mode"), v.value.to_string().into()); }
+                            if let Some(v) = map.get(&TagId::WhiteBalance) { settings.insert(String::from("White balance"), v.value.to_string().into()); }
                         }
                         if let Some(map) = tag_map.get(&GroupId::Lens) {
-                                 if let Some(v) = map.get(&TagId::IrisTStop) { settings.insert(String::from("Iris"),         v.value.to_string().into()); }
-                            else if let Some(v) = map.get(&TagId::IrisFStop) { settings.insert(String::from("Iris"),         v.value.to_string().into()); }
-                            if let Some(v) = map.get(&TagId::FocalLength)    { settings.insert(String::from("Focal length"), v.value.to_string().into()); }
+                                 if let Some(v) = map.get(&TagId::IrisTStop) { settings.insert(String::from("Iris"), v.value.to_string().into()); }
+                            else if let Some(v) = map.get(&TagId::IrisFStop) { settings.insert(String::from("Iris"), v.value.to_string().into()); }
+                            if let Some(v) = map.get(&TagId::FocalLength) { settings.insert(String::from("Focal length"), v.value.to_string().into()); }
                         }
                         if let Some(map) = tag_map.get(&GroupId::Autofocus) {
                             if let Some(v) = map.get(&TagId::AutoFocusMode) { settings.insert(String::from("Focus mode"), v.value.to_string().into()); }
@@ -488,8 +488,8 @@ impl GyroSource {
             self.quaternions = file_metadata.quaternions.clone();
             self.integration_method = 0;
             let len = file_metadata.quaternions.len() as f64;
-            let first_ts = file_metadata.quaternions.iter().next()      .map(|x| *x.0 as f64 / 1000.0).unwrap_or_default();
-            let last_ts  = file_metadata.quaternions.iter().next_back() .map(|x| *x.0 as f64 / 1000.0).unwrap_or_default();
+            let first_ts = file_metadata.quaternions.iter().next().map(|x| *x.0 as f64 / 1000.0).unwrap_or_default();
+            let last_ts  = file_metadata.quaternions.iter().next_back().map(|x| *x.0 as f64 / 1000.0).unwrap_or_default();
             let imu_duration = (last_ts - first_ts) * ((len + 1.0) / len);
             if (imu_duration - self.duration_ms).abs() > 0.01 {
                 log::warn!("IMU duration {imu_duration} is different than video duration ({})", self.duration_ms);
@@ -504,7 +504,7 @@ impl GyroSource {
                 let file_metadata = self.file_metadata.read();
                 let len = file_metadata.raw_imu.len() as f64;
                 let first_ts = file_metadata.raw_imu.first().map(|x| x.timestamp_ms).unwrap_or_default();
-                let last_ts  = file_metadata.raw_imu.last() .map(|x| x.timestamp_ms).unwrap_or_default();
+                let last_ts  = file_metadata.raw_imu.last().map(|x| x.timestamp_ms).unwrap_or_default();
                 let imu_duration = (last_ts - first_ts) * ((len + 1.0) / len);
                 if (imu_duration - self.duration_ms).abs() > 0.01 {
                     log::warn!("IMU duration {imu_duration} is different than video duration ({})", self.duration_ms);
@@ -540,12 +540,12 @@ impl GyroSource {
                     }
                 }
             },
-            1 => self.quaternions = ComplementaryIntegrator  ::integrate(self.raw_imu(&file_metadata), self.duration_ms),
-            2 => self.quaternions = VQFIntegrator            ::integrate(self.raw_imu(&file_metadata), self.duration_ms),
-            3 => self.quaternions = SimpleGyroIntegrator     ::integrate(self.raw_imu(&file_metadata), self.duration_ms),
+            1 => self.quaternions = ComplementaryIntegrator::integrate(self.raw_imu(&file_metadata), self.duration_ms),
+            2 => self.quaternions = VQFIntegrator::integrate(self.raw_imu(&file_metadata), self.duration_ms),
+            3 => self.quaternions = SimpleGyroIntegrator::integrate(self.raw_imu(&file_metadata), self.duration_ms),
             4 => self.quaternions = SimpleGyroAccelIntegrator::integrate(self.raw_imu(&file_metadata), self.duration_ms),
-            5 => self.quaternions = MahonyIntegrator         ::integrate(self.raw_imu(&file_metadata), self.duration_ms),
-            6 => self.quaternions = MadgwickIntegrator       ::integrate(self.raw_imu(&file_metadata), self.duration_ms),
+            5 => self.quaternions = MahonyIntegrator::integrate(self.raw_imu(&file_metadata), self.duration_ms),
+            6 => self.quaternions = MadgwickIntegrator::integrate(self.raw_imu(&file_metadata), self.duration_ms),
             _ => log::error!("Unknown integrator")
         }
     }
@@ -561,7 +561,7 @@ impl GyroSource {
             let additional_rotation_x = compute_params.keyframes.value_at_gyro_timestamp(&KeyframeType::AdditionalRotationX, timestamp_ms).unwrap_or(compute_params.additional_rotation.0) * DEG2RAD;
             let additional_rotation_y = compute_params.keyframes.value_at_gyro_timestamp(&KeyframeType::AdditionalRotationY, timestamp_ms).unwrap_or(compute_params.additional_rotation.1) * DEG2RAD;
             let additional_rotation_z = compute_params.keyframes.value_at_gyro_timestamp(&KeyframeType::AdditionalRotationZ, timestamp_ms).unwrap_or(compute_params.additional_rotation.2) * DEG2RAD;
-            let additional_rotation   = Quat64::from_euler_angles(additional_rotation_y, additional_rotation_x, additional_rotation_z);
+            let additional_rotation = Quat64::from_euler_angles(additional_rotation_y, additional_rotation_x, additional_rotation_z);
 
             *q *= additional_rotation;
         }
@@ -619,7 +619,7 @@ impl GyroSource {
     }
     pub fn remove_offsets_near(&mut self, ts: i64, range_ms: f64) {
         let range_us = (range_ms * 1000.0).round() as i64;
-        self.offsets.retain(|k, _| !(ts-range_us..ts+range_us).contains(k));
+        self.offsets.retain(|k, _| !(ts - range_us .. ts + range_us).contains(k));
         self.adjust_offsets();
     }
 
@@ -777,18 +777,20 @@ impl GyroSource {
         Quat64::identity()
     }
 
-    pub fn      org_quat_at_timestamp(&self, timestamp_ms: f64) -> Quat64 { self.quat_at_timestamp(&self.quaternions,          timestamp_ms) }
+    pub fn org_quat_at_timestamp(&self, timestamp_ms: f64) -> Quat64 { self.quat_at_timestamp(&self.quaternions, timestamp_ms) }
     pub fn smoothed_quat_at_timestamp(&self, timestamp_ms: f64) -> Quat64 { self.quat_at_timestamp(&self.smoothed_quaternions, timestamp_ms) }
 
     pub fn offset_at_timestamp(offsets: &BTreeMap<i64, f64>, timestamp_ms: f64) -> f64 {
         match offsets.len() {
             0 => 0.0,
+            // values返回一个关于map值的迭代器（按键的顺序），next移动迭代器指针并返回当前值
             1 => *offsets.values().next().unwrap(),
             _ => {
                 if let Some(&first_ts) = offsets.keys().next() {
                     if let Some(&last_ts) = offsets.keys().next_back() {
                         let timestamp_us = (timestamp_ms * 1000.0) as i64;
-                        let lookup_ts = (timestamp_us).min(last_ts-1).max(first_ts+1);
+                        let lookup_ts = timestamp_us.min(last_ts - 1).max(first_ts + 1);
+                        // range范围查找<=lookup_ts的结果，next_back返回最后一个元素
                         if let Some(offs1) = offsets.range(..=lookup_ts).next_back() {
                             if *offs1.0 == lookup_ts {
                                 return *offs1.1;
@@ -807,7 +809,7 @@ impl GyroSource {
         }
     }
     pub fn offset_at_video_timestamp(&self, timestamp_ms: f64) -> f64 { Self::offset_at_timestamp(&self.offsets_adjusted, timestamp_ms) }
-    pub fn offset_at_gyro_timestamp (&self, timestamp_ms: f64) -> f64 { Self::offset_at_timestamp(&self.offsets, timestamp_ms) }
+    pub fn offset_at_gyro_timestamp(&self, timestamp_ms: f64) -> f64 { Self::offset_at_timestamp(&self.offsets, timestamp_ms) }
 
     pub fn get_checksum(&self) -> u64 {
         use std::hash::Hasher;
