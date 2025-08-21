@@ -37,20 +37,23 @@ impl EstimatePoseTrait for PoseFindHomography {
 
             let homography = opencv::calib3d::find_homography_ext(&a1_pts, &a2_pts, opencv::calib3d::RANSAC, 0.001, &mut inliers, 2000, 0.999)?;
 
-            let mut r: Vector<Mat> = Default::default();
+            let mut r: Vector<Mat> = Default::default(); // Vector<Mat>是对std::vector<cv::Mat>的Rust封装
             let mut t: Vector<Mat> = Default::default();
             let mut n: Vector<Mat> = Default::default();
 
             opencv::calib3d::decompose_homography_mat(&homography, &cam_matrix, &mut r, &mut t, &mut n)?;
 
+            // .zip将两个迭代器组合在一起，会创建一个新的迭代器，每个元素是一个(R_i, T_i)对，fold函数是一个强大的迭代器方法
+            // 用于累积计算（类似于其他语言的reduce），它通过一个初始值和一个闭包函数来处理每个元素，cr当前的累加器值
             if let Some((r, _)) = r.iter().zip(t.iter()).fold(None, |cr, (r, t)| {
-                    let dot = t.dot(&t).unwrap_or(0.0);
-                    match cr {
-                        Some((cr, m)) if m < dot => Some((cr, m)),
-                        _ => Some((r, dot)),
-                    }
-                }) {
-                    cv_to_na(r)
+                let dot = t.dot(&t).unwrap_or(0.0);
+                match cr {
+                    // 如果存在一个最佳解，比较点积
+                    Some((cr, m)) if m < dot => Some((cr, m)),
+                    _ => Some((r, dot)),
+                }
+            }) {
+                cv_to_na(r)
             } else {
                 Err(opencv::Error::new(0, "Model not found".to_string()))
             }
