@@ -91,7 +91,8 @@ impl AutosyncProcess {
         // Make sure we apply full correction for autosync
         comp_params.lens_correction_amount = 1.0;
 
-        let thread_pool = rayon::ThreadPoolBuilder::new()
+        // 设置线程池的线程个数
+        let thread_pool = rayon::ThreadPoolBuilder::new().num_threads(1)
             .thread_name(move |i| format!("Sync {}", i))
             .stack_size(10 * 1024 * 1024) // 10 MB
             .panic_handler(move |e| {
