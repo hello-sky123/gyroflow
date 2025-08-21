@@ -12,7 +12,7 @@ use space::{ Knn, LinearKnn };
 
 const LOWES_RATIO: f32 = 0.5;
 
-pub type Descriptor = BitArray<64>;
+pub type Descriptor = BitArray<64>; // 64位的位数组
 
 #[derive(Clone)]
 pub struct OFAkaze {
@@ -23,9 +23,11 @@ pub struct OFAkaze {
 
 impl OFAkaze {
     pub fn detect_features(_timestamp_us: i64, img: Arc<image::GrayImage>, width: u32, height: u32) -> Self {
+        // 创建AKAZE方法的实例，并设置一个关键参数（阈值/对比度），这个参数影响检测到的特征点的质量和数量
         let mut akz = Akaze::new(0.0007);
         akz.maximum_features = 200;
         let img_size = (width, height);
+        // try_unwarp将Arc指针转换为其内部数据的所有权，如果只有一个引用则成功，否则失败
         let (points, descriptors) = akz.extract(&image::DynamicImage::ImageLuma8(Arc::try_unwrap(img).unwrap()));
 
         Self {
