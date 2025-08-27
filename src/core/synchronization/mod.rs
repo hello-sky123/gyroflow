@@ -242,12 +242,14 @@ impl PoseEstimator {
 
     pub fn get_of_lines_for_timestamp(&self, timestamp_us: &i64, next_no: usize, scale: f64, num_frames: usize, filter: bool) -> (OpticalFlowPairWithTs, Option<(u32, u32)>) {
         if let Some(l) = self.sync_results.try_read() {
+            // Option有一个方法map，如果Option是Some(v)，就对v应用闭包函数并返回Some(结果)，如果是None则直接返回None
             if let Some(first_ts) = l.get_closest(timestamp_us, 2000).map(|v| v.timestamp_us) {
                 let mut iter = l.range(first_ts..);
                 for _ in 0..next_no { iter.next(); }
                 if let Some((_, curr)) = iter.next() {
                     if let Ok(of) = curr.optical_flow.try_borrow() {
                         if let Some(opt_pts) = of.get(&num_frames) {
+                            // 返回查找结果
                             return (if filter {
                                 Self::filter_of_lines(opt_pts, scale)
                             } else {
