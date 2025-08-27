@@ -74,19 +74,25 @@ use std::collections::BTreeMap;
 pub trait MapClosest<V> {
     fn get_closest(&self, key: &i64, max_diff: i64) -> Option<&V>;
 }
+
+// impl<V>声明泛型参数，表示后续类型中的V是泛型占位符，MapClosest<V>要实现的trait名称，其定义也接受泛型参数V
+// for BTreeMap<i64, V>指定了这个trait实现是针对BTreeMap类型的，键类型是i64，值类型是V
 impl<V> MapClosest<V> for BTreeMap<i64, V> {
+    // key是要查找的键，max_diff是允许的最大差值
     fn get_closest(&self, key: &i64, max_diff: i64) -> Option<&V> {
         if self.is_empty() { return None; };
         if self.contains_key(key) { return self.get(key); };
 
-        let r1 = self.range(..key);
-        let mut r2 = self.range(key..);
+        let r1 = self.range(..key); // 获取所有小于key的范围迭代器
+        let mut r2 = self.range(key..); // 获取所有大于等于key的范围迭代器
 
-        let f = r1.last();
-        let b = r2.next();
+        let f = r1.last(); // 取最后一个，也就是最接近key的前驱
+        let b = r2.next(); // 取第一个，也就是最接近key的后继
+        // 计算前驱和后继与key的差值，前驱和后继不存在时，使用一个很大的默认值-99999
         let bd = (key - b.map(|v| *v.0).unwrap_or(-99999)).abs();
         let fd = (key - f.map(|v| *v.0).unwrap_or(-99999)).abs();
 
+        // 比较前驱和后继的差值，选择较小且在max_diff范围内的那个
         if b.is_some() && bd < max_diff && bd < fd {
             Some(b.unwrap().1)
         } else if f.is_some() && fd < max_diff && fd < bd {
