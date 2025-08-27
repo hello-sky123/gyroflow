@@ -28,6 +28,7 @@ pub fn find_offsets<F: Fn(f64) + Sync>(estimator: &PoseEstimator, ranges: &[(i64
         if cancel_flag.load(Relaxed) { break; }
         progress_cb(i as f64 / ranges_len);
 
+        // 在当前时间范围内，收集所有预先计算好的特征点匹配对
         let mut matched_points = Vec::new();
         for ts in &keys {
             if (*from_ts..*to_ts).contains(ts) {
